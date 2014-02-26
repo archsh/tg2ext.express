@@ -12,7 +12,7 @@ convert them into boolean, for example, you should use the
     setting = asbool(global_conf.get('the_setting'))
  
 """
-
+import sys
 from tg.configuration import AppConfig
 
 import tg2express
@@ -25,6 +25,7 @@ base_config.prefer_toscawidgets2 = True
 
 base_config.package = tg2express
 
+print sys.path.append('../')
 #Enable json in expose
 base_config.renderers.append('json')
 #Enable genshi in expose to have a lingua franca for extensions and pluggable apps

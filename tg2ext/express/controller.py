@@ -4,7 +4,7 @@ import logging
 from sqlalchemy.orm.query import Query
 from sqlalchemy import Column, Integer, SmallInteger, BigInteger
 from sqlalchemy import String, Unicode
-from sqlalchemy import and_, or_, func
+from sqlalchemy import and_, or_, func, desc, asc
 from sqlalchemy.orm import joinedload, subqueryload
 from sqlalchemy.sql import expression
 from tg import RestController, expose, request, response, abort
@@ -165,12 +165,12 @@ def build_order_by(cls, order_by):
     """build_order_by: build order by criterias with the given list order_by in strings."""
     ## TODO(SHENMC): Order By ?
     def _gen_order_by(c, by):
-        desc = False
+        is_desc = False
         if by and by.startswith('-'):
             by = by[1:]
-            desc = True
+            is_desc = True
         if by and by in c.__table__.c.keys():
-            return None, getattr(c, by).desc if desc else getattr(c, by).asc
+            return None, desc(getattr(c, by)) if is_desc else asc(getattr(c, by))
         else:
             return None, None
 
@@ -180,7 +180,7 @@ def build_order_by(cls, order_by):
         return joins, order_bys
     for x in order_by:
         j, o = _gen_order_by(cls, x)
-        if not o:
+        if o is None:
             continue
         order_bys.append(o)
         if j:
@@ -269,8 +269,6 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
         return inst
     logger.debug('serialize_object> extend_fields: %s', extend_fields)
     include_fields = list(set(include_fields or cls.__table__.c.keys()) | set(cls.__table__.primary_key.columns.keys()))
-    if hasattr(cls, '__handler__') and cls.__handler__._meta.invisible:
-        include_fields = list(set(include_fields) - set(cls.__handler__._meta.invisible))
     if not set(include_fields) <= set(cls.__table__.c.keys()):
         raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
             set(include_fields) - set(cls.__table__.c.keys())
@@ -415,9 +413,10 @@ class ExpressController(RestController):
             })
             if order_by:
                 ## TODO(SHENMC): Order by not implemented!!!
-                logger.debug("Order By: %s", order_by)
+                logger.debug("Order By1: %s", order_by)
                 joins, orderbys = build_order_by(self._model_, order_by)
                 if orderbys:
+                    logger.debug("Order By2: %s", orderbys)
                     inst = inst.order_by(*orderbys)
             inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
             result[self._model_.__name__] = serialize(self._model_,
@@ -622,23 +621,9 @@ class ExpressController(RestController):
                     if not exits_objs:
                         raise NotFound(message='%s with pk "%s" was not found!' % (k, v))
                 if new_obj_datas:
-                    if hasattr(related_class, '__handler__'):
-                        #related_handler = getattr(related_class, '__handler__')
-                        related_handler = getattr(related_class, '__handler__')
-                        new_objs, exflds = related_handler(self.application,
-                                                           self.request,
-                                                           __db_session = self._dbsession_,
-                                                           __skip_request=True)._create(new_obj_datas)
-                        #setattr(obj, k, related_objs)
-                        logger.debug('new_objs: %s, exflds: %s', new_objs, exflds)
-                        if exflds:
-                            ext_flds.extend(['.'.join([k, x])for x in exflds])
-                        else:
-                            ext_flds.append(k)
-                    else:
-                        new_objs = related_class(**new_obj_datas) if isinstance(new_obj_datas, dict) \
-                            else [related_class(**xx) for xx in new_obj_datas]
-                        ext_flds.append(k)
+                    new_objs = related_class(**new_obj_datas) if isinstance(new_obj_datas, dict) \
+                        else [related_class(**xx) for xx in new_obj_datas]
+                    ext_flds.append(k)
                 else:
                     ext_flds.append(k)
                 related_objs = None
