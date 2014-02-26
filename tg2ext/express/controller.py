@@ -10,57 +10,10 @@ from sqlalchemy.sql import expression
 from tg import RestController, expose, request, response, abort
 from .exceptions import *
 
-
 logger = logging.getLogger('tgext.express')
 
 
-REQUEST_KEYS = ('GET', 'POST', 'ResponseClass', '__call__', '__class__', '__class__', '__contains__', '__delattr__',
-                '__delattr__', '__delitem__', '__dict__', '__dict__', '__dir__', '__doc__', '__doc__', '__format__',
-                '__format__', '__getattr__', '__getattr__', '__getattribute__', '__getattribute__', '__getitem__',
-                '__hash__', '__hash__', '__init__', '__init__', '__iter__', '__len__', '__module__', '__module__',
-                '__new__', '__new__', '__nonzero__', '__reduce__', '__reduce__', '__reduce_ex__', '__reduce_ex__',
-                '__repr__', '__repr__', '__setattr__', '__setattr__', '__setitem__', '__sizeof__', '__sizeof__',
-                '__str__', '__str__', '__subclasshook__', '__subclasshook__', '__weakref__', '__weakref__',
-                '_body__del', '_body__get', '_body__set', '_body_file__del', '_body_file__get', '_body_file__set',
-                '_cache_control__del', '_cache_control__get', '_cache_control__set', '_charset', '_check_charset',
-                '_content_type__get', '_content_type__set', '_content_type_raw', '_controller_state',
-                '_copy_body_tempfile', '_current_obj', '_fast_setattr', '_headers', '_headers__get', '_headers__set',
-                '_host__del', '_host__get', '_host__set', '_is_body_readable__get', '_is_body_readable__set',
-                '_json_body__del', '_json_body__get', '_json_body__set', '_language', '_response_ext', '_response_type',
-                '_setattr_stacklevel', '_text__del', '_text__get', '_text__set', '_update_cache_control',
-                '_urlargs__del', '_urlargs__get', '_urlargs__set', '_urlvars__del', '_urlvars__get', '_urlvars__set',
-                'accept', 'accept_charset', 'accept_encoding', 'accept_language', 'application_url', 'args_params',
-                'as_bytes', 'as_string', 'as_text', 'authorization', 'blank', 'body', 'body_file', 'body_file_raw',
-                'body_file_seekable', 'cache_control', 'call_application', 'charset', 'client_addr', 'content_length',
-                'content_type', 'controller_state', 'cookies', 'copy', 'copy_body', 'copy_get', 'date', 'decode',
-                'domain', 'encget', 'encset', 'environ', 'from_bytes', 'from_file', 'from_string', 'from_text',
-                'get_response', 'headers', 'host', 'host_port', 'host_url', 'http_version', 'if_match',
-                'if_modified_since', 'if_none_match', 'if_range', 'if_unmodified_since', 'is_body_readable',
-                'is_body_seekable', 'is_xhr', 'json', 'json_body', 'language', 'languages', 'languages_best_match',
-                'make_body_seekable', 'make_default_send_app', 'make_tempfile', 'match_accept', 'max_forwards',
-                'method', 'name', 'params', 'path', 'path_info', 'path_info_peek', 'path_info_pop', 'path_qs',
-                'path_url', 'plain_languages', 'pragma', 'query_string', 'range', 'referer', 'referrer', 'relative_url',
-                'remote_addr', 'remote_user', 'remove_conditional_headers', 'request_body_tempfile_limit',
-                'response_ext', 'response_type', 'scheme', 'script_name', 'send', 'server_name', 'server_port',
-                'signed_cookie',   'text', 'upath_info', 'url',
-                'url_encoding', 'urlargs', 'urlvars', 'uscript_name', 'user_agent')
-
-DEPRECATED_KEYS = (
-    'str_GET', 'str_POST', 'str_cookies', 'str_params',
-)
-
-
-def debug_request(req):
-    for k in REQUEST_KEYS:
-        if not hasattr(req, k):
-            logger.debug('Request>> missing %s ... ', k)
-        else:
-            logger.debug('Request[%s]:>> %s', k, getattr(req, k))
-
-
 #######################################################################################################################
-
-
 def revert_list_of_qs(qs):
     """revert_list_of_qs, process the result of escape.parse_qs_bytes which convert the item values if the type is list
     and has only one element to it's first element. Otherwize, keep the original value.
@@ -210,13 +163,14 @@ def build_filter(model, key, value, joins=None):
 
 def build_order_by(cls, order_by):
     """build_order_by: build order by criterias with the given list order_by in strings."""
+    ## TODO(SHENMC): Order By ?
     def _gen_order_by(c, by):
         return None, None
 
     joins = list()
     order_bys = list()
     if not order_by:
-        return None, None
+        return [], []
     for x in order_by:
         j, o = _gen_order_by(cls, x)
         if not o:
