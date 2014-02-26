@@ -1,0 +1,918 @@
+# -*- coding: utf-8 -*-
+import types
+import logging
+from sqlalchemy.orm.query import Query
+from sqlalchemy import Column, Integer, SmallInteger, BigInteger
+from sqlalchemy import String, Unicode
+from sqlalchemy import and_, or_, func
+from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy.sql import expression
+from tg import RestController, expose, request, response, abort
+from .exceptions import *
+
+
+logger = logging.getLogger('tgext.express')
+
+
+REQUEST_KEYS = ('GET', 'POST', 'ResponseClass', '__call__', '__class__', '__class__', '__contains__', '__delattr__',
+                '__delattr__', '__delitem__', '__dict__', '__dict__', '__dir__', '__doc__', '__doc__', '__format__',
+                '__format__', '__getattr__', '__getattr__', '__getattribute__', '__getattribute__', '__getitem__',
+                '__hash__', '__hash__', '__init__', '__init__', '__iter__', '__len__', '__module__', '__module__',
+                '__new__', '__new__', '__nonzero__', '__reduce__', '__reduce__', '__reduce_ex__', '__reduce_ex__',
+                '__repr__', '__repr__', '__setattr__', '__setattr__', '__setitem__', '__sizeof__', '__sizeof__',
+                '__str__', '__str__', '__subclasshook__', '__subclasshook__', '__weakref__', '__weakref__',
+                '_body__del', '_body__get', '_body__set', '_body_file__del', '_body_file__get', '_body_file__set',
+                '_cache_control__del', '_cache_control__get', '_cache_control__set', '_charset', '_check_charset',
+                '_content_type__get', '_content_type__set', '_content_type_raw', '_controller_state',
+                '_copy_body_tempfile', '_current_obj', '_fast_setattr', '_headers', '_headers__get', '_headers__set',
+                '_host__del', '_host__get', '_host__set', '_is_body_readable__get', '_is_body_readable__set',
+                '_json_body__del', '_json_body__get', '_json_body__set', '_language', '_response_ext', '_response_type',
+                '_setattr_stacklevel', '_text__del', '_text__get', '_text__set', '_update_cache_control',
+                '_urlargs__del', '_urlargs__get', '_urlargs__set', '_urlvars__del', '_urlvars__get', '_urlvars__set',
+                'accept', 'accept_charset', 'accept_encoding', 'accept_language', 'application_url', 'args_params',
+                'as_bytes', 'as_string', 'as_text', 'authorization', 'blank', 'body', 'body_file', 'body_file_raw',
+                'body_file_seekable', 'cache_control', 'call_application', 'charset', 'client_addr', 'content_length',
+                'content_type', 'controller_state', 'cookies', 'copy', 'copy_body', 'copy_get', 'date', 'decode',
+                'domain', 'encget', 'encset', 'environ', 'from_bytes', 'from_file', 'from_string', 'from_text',
+                'get_response', 'headers', 'host', 'host_port', 'host_url', 'http_version', 'if_match',
+                'if_modified_since', 'if_none_match', 'if_range', 'if_unmodified_since', 'is_body_readable',
+                'is_body_seekable', 'is_xhr', 'json', 'json_body', 'language', 'languages', 'languages_best_match',
+                'make_body_seekable', 'make_default_send_app', 'make_tempfile', 'match_accept', 'max_forwards',
+                'method', 'name', 'params', 'path', 'path_info', 'path_info_peek', 'path_info_pop', 'path_qs',
+                'path_url', 'plain_languages', 'pragma', 'query_string', 'range', 'referer', 'referrer', 'relative_url',
+                'remote_addr', 'remote_user', 'remove_conditional_headers', 'request_body_tempfile_limit',
+                'response_ext', 'response_type', 'scheme', 'script_name', 'send', 'server_name', 'server_port',
+                'signed_cookie',   'text', 'upath_info', 'url',
+                'url_encoding', 'urlargs', 'urlvars', 'uscript_name', 'user_agent')
+
+DEPRECATED_KEYS = (
+    'str_GET', 'str_POST', 'str_cookies', 'str_params',
+)
+
+
+def debug_request(req):
+    for k in REQUEST_KEYS:
+        if not hasattr(req, k):
+            logger.debug('Request>> missing %s ... ', k)
+        else:
+            logger.debug('Request[%s]:>> %s', k, getattr(req, k))
+
+
+#######################################################################################################################
+
+
+def revert_list_of_qs(qs):
+    """revert_list_of_qs, process the result of escape.parse_qs_bytes which convert the item values if the type is list
+    and has only one element to it's first element. Otherwize, keep the original value.
+    """
+    if not isinstance(qs, dict):
+        return
+    for k, v in qs.items():
+        if isinstance(v, list) and len(v) == 1 and isinstance(v[0], (str, unicode)):
+            qs[k] = v[0]
+
+
+def make_pk_regex(pk_clmns):
+    """make_pk_regex generate a tuple of (fieldname, regex_pattern) according to the giving primary key fields of table.
+    Only the integer and string field are supported, return None if no primary key field of it's not type of integer or
+    string. Function only takes the first pk if there're more than one primary key fields.
+    """
+    if isinstance(pk_clmns, Column):
+        if isinstance(pk_clmns.type, (Integer, BigInteger, SmallInteger)):
+            return pk_clmns.name, r'(?P<%s>[0-9]+)' % pk_clmns.name
+        elif isinstance(pk_clmns.type, (String, Unicode)):
+            return pk_clmns.name, r'(?P<%s>[0-9A-Za-z_-]+)' % pk_clmns.name
+        else:
+            return None  # , None
+    elif isinstance(pk_clmns, (list, tuple)):
+        return make_pk_regex(pk_clmns[0])
+    else:
+        return None  # , None
+
+
+def str2list(s):
+    if not s:
+        return []
+    if isinstance(s, (list, tuple)):
+        ss = list()
+        for x in s:
+            r = str2list(x)
+            if r:
+                ss.extend(r)
+        return ss
+    elif isinstance(s, (str, unicode)):
+        return s.split(',')
+
+
+def str2int(s):
+    if s is None:
+        return None
+    else:
+        return int(s)
+
+
+QUERY_LOOKUPS = ('not', 'contains', 'startswith', 'endswith', 'in', 'range', 'lt', 'lte', 'gt', 'gte',
+                 'year', 'month', 'day', 'hour', 'minute', 'dow', '')
+
+
+def build_filter(model, key, value, joins=None):
+    logger.debug('build_filter>>> %s | %s | %s | %s', model, key, value, joins)
+    if not key:
+        raise InvalidExpression(message='Invalid Expression!')  # return None, None
+
+    def _encode_(k, v):
+        f = model.__handler__._get_encoder(k) if hasattr(model, '__handler__') else None
+        if f is None:
+            return v
+        else:
+            return f(v)
+
+    k1 = key.pop(0)  # Get the first part of key
+    kk = k1.split('__')
+    kk1 = kk.pop(0)
+    if kk1 in model.__table__.c.keys():  # Check if this is a field
+        field = getattr(model, kk1)
+        if not kk:
+            return field == _encode_(kk1, value), joins
+        else:
+            _not_ = False
+            if 'not' in kk:
+                _not_ = True
+                kk.remove('not')
+            if not kk:
+                return (~(field == _encode_(kk1, value)) if _not_ else (field == _encode_(kk1, value))), joins
+            op = kk.pop(0)
+            if 'contains' == op and not kk:
+                exp = field.like(u'%%%s%%' % _encode_(kk1, value))
+            elif 'startswith' == op and not kk:
+                exp = field.like(u'%s%%' % _encode_(kk1, value))
+            elif 'endswith' == op and not kk:
+                exp = field.like(u'%%%s' % _encode_(kk1, value))
+            elif 'in' == op and not kk:
+                exp = field.in_(map(lambda x: _encode_(kk1, x),
+                                    value if isinstance(value, (list, tuple)) else str2list(value)))
+            elif 'range' == op and not kk:
+                value = map(lambda x: _encode_(kk1, x), value if isinstance(value, (list, tuple)) else str2list(value))
+                if len(value) != 2:
+                    raise InvalidExpression(message='Invalid Expression!')  # return None, None
+                exp = and_(field >= _encode_(kk1, value[0]), field <= _encode_(kk1, value[1]))
+            elif 'lt' == op and not kk:
+                exp = field < _encode_(kk1, value)
+            elif 'lte' == op and not kk:
+                exp = field <= _encode_(kk1, value)
+            elif 'gt' == op and not kk:
+                exp = field > _encode_(kk1, value)
+            elif 'gte' == op and not kk:
+                exp = field >= _encode_(kk1, value)
+            elif op in ('year', 'month', 'day', 'hour', 'minute', 'dow'):
+                # This needs the RMDBs support the EXTRACT function for DATETIME field.
+                if not kk:
+                    exp = expression.extract(op.upper(), field) == int(value)
+                elif len(kk) == 1:
+                    exop = kk[0]
+                    if exop == 'lt':
+                        exp = expression.extract(op.upper(), field) < int(value)
+                    elif exop == 'lte':
+                        exp = expression.extract(op.upper(), field) <= int(value)
+                    elif exop == 'gt':
+                        exp = expression.extract(op.upper(), field) > int(value)
+                    elif exop == 'gte':
+                        exp = expression.extract(op.upper(), field) >= int(value)
+                    elif exop == 'in':
+                        exp = expression.extract(op.upper(), field).in_(map(lambda x:int(x),
+                                                                            value if isinstance(value, (list, tuple))
+                                                                            else str2list(value)))
+                    elif exop == 'range':
+                        value = map(lambda x: int(x), value if isinstance(value, (list, tuple)) else str2list(value))
+                        if len(value) != 2:
+                            raise InvalidExpression(message='Invalid Expression!')  # return None, None
+                        exp = and_(expression.extract(op.upper(), field) >= int(value[0]),
+                                   expression.extract(op.upper(), field) <= int(value[1]))
+                    else:
+                        raise InvalidExpression(message='Invalid Expression!')  # return None, None
+                else:
+                    raise InvalidExpression(message='Invalid Expression!')  # return None, None
+
+            else:
+                raise InvalidExpression(message='Invalid Expression!')  # return None, None
+            return ~exp if _not_ else exp, joins
+    elif k1 in model.__mapper__.relationships.keys() and key:  # Check if this is a relationship
+        logger.debug('go relationships: %s, %s', k1, joins)
+        relationship = getattr(model, k1)
+        if joins:
+            joins.append(relationship)
+        else:
+            joins = [relationship]
+        return build_filter(model.__mapper__.relationships[k1].mapper.class_, key, value, joins=joins)
+    else:  # Check of this is
+        return None, None
+
+
+def build_order_by(cls, order_by):
+    """build_order_by: build order by criterias with the given list order_by in strings."""
+    def _gen_order_by(c, by):
+        return None, None
+
+    joins = list()
+    order_bys = list()
+    if not order_by:
+        return None, None
+    for x in order_by:
+        j, o = _gen_order_by(cls, x)
+        if not o:
+            continue
+        order_bys.append(o)
+        if j:
+            joins.extend(j)
+    return joins, order_bys
+
+
+def find_join_loads(cls, extend_fields):
+    """find_join_loads: find the relationships from extend_fields which we can call joinloads for EagerLoad..."""
+    def _relations_(c, exts):
+        if not exts:
+            return None
+        ret = []
+        r = exts.pop(0)
+        if r in c.__mapper__.relationships.keys():
+            ret.append(r)
+            r1 = _relations_(c.__mapper__.relationships[r].mapper.class_, exts)
+            if r1:
+                ret.extend(r1)
+        return ret
+
+    if not extend_fields:
+        return None
+    result = list()
+    for x in extend_fields:
+        y = _relations_(cls, x.split('.'))
+        if y:
+            result.append('.'.join(y))
+    return result
+
+
+def query_reparse(query):
+    """query_reparse: reparse the query.
+    Returns controls dictionary and re-constructed query dictionary.
+    """
+    if not query or not isinstance(query, dict):
+        return {}, {}
+    new_query = {'__default': {}}
+    controls = {
+        'include_fields': str2list(query.pop('__include_fields', None)),
+        'exclude_fields': str2list(query.pop('__exclude_fields', None)),
+        'extend_fields': str2list(query.pop('__extend_fields', None)),
+        'begin': str2int(query.pop('__begin', 0)),
+        'limit': str2int(query.pop('__limit', None)),
+        'order_by': str2list(query.pop('__order_by', None))
+    }
+    for k, v in query.items():
+        ks = k.split('|')
+        if len(ks) == 1:
+            new_query['__default'][k] = v
+        else:
+            new_query['_'.join(ks)] = dict(zip(ks, v.split('|')))
+    return controls, new_query
+
+
+def restruct_ext_fields(cls, extend_fields):
+
+    def _f_(s):
+        ss = s.split('.', 1)
+        logger.debug('_f_: %s', ss)
+        return ss[0], ss[1] if len(ss) == 2 else None
+
+    if not extend_fields:
+        return {}
+    result = {}
+    for x, y in map(_f_, extend_fields):
+        logger.debug('[1]restruct_ext_fields> %s: %s', x, y)
+        if x not in cls.__mapper__.relationships.keys():
+            continue
+        if x not in result:
+            result[x] = [y] if y else []
+        elif y:
+            result[x].append(y)
+    logger.debug('[2]restruct_ext_fields> %s: %s', cls, result)
+    return result
+
+
+def serialize_object(cls, inst, include_fields=None, extend_fields=None):
+    """serialize_object: serialize a single object from model instance into a dictionary.
+    """
+    logger.debug('Inst: %s | %s', inst, type(inst))
+    if isinstance(inst, (list, tuple, types.GeneratorType)):
+        return map(lambda x: serialize_object(cls, x, include_fields=include_fields, extend_fields=extend_fields),
+                   inst)
+    if not isinstance(inst, cls):
+        return inst
+    logger.debug('serialize_object> extend_fields: %s', extend_fields)
+    include_fields = list(set(include_fields or cls.__table__.c.keys()) | set(cls.__table__.primary_key.columns.keys()))
+    if hasattr(cls, '__handler__') and cls.__handler__._meta.invisible:
+        include_fields = list(set(include_fields) - set(cls.__handler__._meta.invisible))
+    if not set(include_fields) <= set(cls.__table__.c.keys()):
+        raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
+            set(include_fields) - set(cls.__table__.c.keys())
+        )))
+    result = dict((k, getattr(inst, k)) for k in include_fields)
+    # TODO: Extend fields ....
+    if extend_fields:
+        logger.debug('serialize_object: extend_fields=%s', extend_fields)
+        for relkey, relext in restruct_ext_fields(cls, extend_fields).items():
+            rinst = cls.__mapper__.relationships[relkey]
+            logger.debug('====> %s: %s', relkey, relext)
+            #if rinst.direction.name in ('MANYTOONE', 'ONETOONE'):
+            incs = filter(lambda x: x.find('.') < 0 and x in rinst.mapper.class_.__table__.c.keys(), relext)
+            #[relext] if (relext and relext.find('.') < 0 and relext in rinst.mapper.class_.__table__.c.keys()) else None
+            exts = filter(lambda x: x.find('.') > 0 or x in rinst.mapper.class_.__mapper__.relationships.keys(), relext)
+            #[relext] if relext and incs is None else None
+            logger.debug('inc=%s, ext=%s', incs, exts)
+            result[relkey] = serialize_object(rinst.mapper.class_, getattr(inst, relkey),
+                                              include_fields=incs,
+                                              extend_fields=exts)
+    #for relkey, relobj in cls.__mapper__.relationships.items():
+    #    pass
+    return result
+
+
+def serialize_query(cls, inst, include_fields=None, extend_fields=None):
+    """serialize_query: serialize a query into a list of object dictionary."""
+    if not isinstance(inst, Query):
+        return None
+    #include_fields = include_fields or cls.__table__.c.keys()
+    #result = list(inst.values(*[getattr(cls, k) for k in include_fields]))
+    # TODO: Extend fields ....
+    return serialize_object(cls, inst.all(), include_fields=include_fields, extend_fields=extend_fields)
+
+
+def serialize(cls, inst, include_fields=None, extend_fields=None):
+    """serialize: serialize model object(s) into dictionary(s)."""
+    if isinstance(inst, Query):
+        inst = inst.all()
+        #return serialize_query(cls, inst, include_fields=include_fields,
+        #                       extend_fields=extend_fields)
+    return serialize_object(cls, inst, include_fields=include_fields, extend_fields=extend_fields)
+
+
+class ExpressController(RestController):
+    """
+    ExpressController, a base controller class for expose models via RestController with minimum coding.
+
+    args_params: params via Query in dict.
+    """
+    _model_ = None  # When define an ExpressController, a sqlalchemy model class should be given via _model_
+
+    def __init__(self, model=None, dbsession=None, *args, **kwargs):
+        if model is not None:
+            self._model_ = model
+        self._dbsession_ = dbsession
+        if self._model_ is None:
+            raise Exception('"_model_" can not be None, must be a valid model class of sqlalchemy!')
+        if self._dbsession_ is None:
+            raise Exception("A valid db session is required!")
+        super(ExpressController, self).__init__(*args, **kwargs)
+        #super(self, ExpressController).__init__(*args, **kwargs)
+
+    def _dump_object_(self, obj, **kwargs):
+        """
+        Dumps one or multiple object(s) into dict or list of dict.
+        """
+        if obj is None:
+            return None
+        if isinstance(obj, (list, tuple)):
+            return map(lambda x: self._dump_object_(x, **kwargs), obj)
+        elif isinstance(obj, self._model_):
+            return dict([(k, getattr(obj, k)) for k in self._model_.__table__.c.keys()])
+        else:
+            raise Exception("Invalid object to dump.")
+
+    def table_schema(self, *args, **kwargs):
+        """
+        Generate the schema of table in to a dict.
+        """
+        table = self._model_
+        fields = dict([(c.name, {'type': '%s' % c.type, 'default': '%s' % c.default if c.default else c.default,
+                                 'nullable': c.nullable, 'unique': c.unique,
+                                 'doc': c.doc, 'primary_key': c.primary_key})
+                       for c in table.__table__.columns.values()])
+        relationships = dict([(n, {'target': r.mapper.class_.__name__,
+                                   'direction': r.direction.name,
+                                   'field': ['%s.%s' % (c.table, c.name) for c in r._calculated_foreign_keys]})
+                              for n, r in table.__mapper__.relationships.items()])
+        return {
+            'table': table.__name__,
+            'fields': fields,
+            'relationships': relationships,
+        }
+
+    def _serialize(self, inst,
+                   include_fields=None,
+                   exclude_fields=None,
+                   extend_fields=None,
+                   order_by=None,
+                   begin=None,
+                   limit=None):
+        """_serialize generate a dictionary from a queryset instance `inst` according to the meta controled by handler
+        and the following arguments:
+        `include_fields`: a list of field names want to included in output;
+        `exclude_fields`: a list of field names will not included in output;
+        `extend_fields`: a list of foreignkey field names and m2m or related attributes with other relationships;
+        `order_by`: a list of field names for ordering the output;
+        `limit`: an integer to limit the number of records to output, 50 by default;
+        Return dictionary will like:
+        {
+            '__ref': '$(HTTP_REQUEST_URI)',
+            '__total': $(NUM_OF_MACHED_RECORDS),
+            '__count': $(NUM_OF_RETURNED_RECORDS),
+            '__limit': $(LIMIT_NUM),
+            '__begin': $(OFFSET),
+            '__model': '$(NAME_OF_MODEL)',
+            '$(NAME_OF_MODEL)': [$(LIST_OF_RECORDS)], ## For multiple records mode
+            '$(NAME_OF_MODEL)': {$(RECORD)}, ## For one record mode
+        }
+        """
+        result = {
+            '__ref': request.path,
+            '__model': self._model_.__name__,
+        }
+
+        #if meta.invisible:
+        #    exclude_fields = exclude_fields.extend(meta.invisible) if exclude_fields else meta.invisible
+        include_fields = list((set(include_fields or self._model_.__table__.columns.keys()) - set(exclude_fields or []))
+                              | set(self._model_.__table__.primary_key.columns.keys()))
+        if extend_fields:
+            logger.debug('extend_fields: %s', extend_fields)
+            pass
+        if isinstance(inst, Query):
+            begin = begin or 0
+            limit = 50 if limit is None else limit
+            result.update({
+                '__total': inst.count(),
+                '__count': inst.count(),
+                '__limit': limit,
+                '__begin': begin,
+            })
+            if order_by:
+                ## TODO(SHENMC): Order by not implemented!!!
+                pass
+            inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
+            result[self._model_.__name__] = serialize(self._model_,
+                                                      inst,
+                                                      include_fields=include_fields, extend_fields=extend_fields)
+             # list(inst.values(*[getattr(self._model_, x) for x in include_fields]))
+        else:
+            logger.debug("Inst >>> %s", inst)
+            logger.debug("Include Fields: %s", include_fields)
+            objs = serialize(self._model_, inst, include_fields=include_fields, extend_fields=extend_fields)
+            if isinstance(objs, (list, tuple)):
+                result[self._model_.__name__] = objs
+                result['__count'] = len(objs)
+            else:
+                result[self._model_.__name__] = objs
+            # dict([(k, getattr(inst, k)) for k in include_fields])
+        return result
+
+    def _validate_object_data(self, object_data):
+        assert isinstance(object_data, dict) and object_data
+        # for key, vf in self._meta.validators.items():
+        #     if key in object_data:
+        #         vf(object_data[key])
+        return object_data
+
+    def _encode_object_data(self, object_data):
+        assert isinstance(object_data, dict) and object_data
+        # for key, vf in self._meta.encoders.items():
+        #     if key in object_data:
+        #         object_data[key] = vf(object_data[key])
+        return object_data
+
+    def _update_object_data(self, object_data):
+        assert isinstance(object_data, dict) and object_data
+        # for key, vf in self._meta.generators.items():
+        #     object_data[key] = vf(object_data[key])
+        return object_data
+
+    def _build_filter(self, key, value):
+        assert key
+        flt, jns = build_filter(self._model_,
+                                key.split('.') if isinstance(key, (str, unicode)) else key, value, joins=None)
+        logger.debug('_build_filter >>> %s | %s', flt, jns)
+        return flt, jns
+
+    def _query(self, query=None):
+        """_query: return a Query instance according to the giving query data.
+        """
+        inst = self._dbsession_.query(self._model_)
+        if not query:
+            return inst
+        default_query = query.pop('__default', None)
+        if default_query:
+            filters = list()
+            joins = list()
+            for k, v in default_query.items():
+                f, j = self._build_filter(k, v)
+                if f is not None:
+                    filters.append(f)
+                    if j is not None:
+                        joins.extend(j)
+            logger.debug('[default] filters: %s', filters)
+            logger.debug('[default] joins: %s', joins)
+            for j in joins:
+                inst = inst.join(j)
+            if filters:
+                inst = inst.filter(and_(*filters))
+        for pair, conditions in query.items():
+            filters, joins = list(), list()
+            for k, v in conditions.items():
+                f, j = self._build_filter(k, v)
+                if f is not None:
+                    filters.append(f)
+                    if j is not None:
+                        joins.extend(j)
+            logger.debug('[%s] filters: %s', pair, filters)
+            logger.debug('[%s] joins: %s', pair, joins)
+            for j in joins:
+                inst = inst.join(j)
+            if filters:
+                inst = inst.filter(or_(*filters))
+        return inst
+
+    def _retrieve_http_query(self, http_request):
+        """
+        Get the HTTP Query items from request object. we don't need the arg_params from request directly some time.
+        """
+        # logger.debug('Request.GET(%s):>> %s', type(http_request.GET), http_request.GET.items())
+        result = dict()
+        for k, v in http_request.GET.items():
+            if k not in result:
+                result[k] = v
+            else:
+                if isinstance(result[k], list):
+                    result[k].append(v)
+                else:
+                    result[k] = [result[k], v]
+        return result
+
+    def _retrieve_http_post(self, http_request):
+        """
+        Get the HTTP Post content from request object. sometimes we don't want TG to do this.
+        """
+        logger.debug('Request.Content-Type:>> %s', http_request.content_type)
+        #logger.debug('Request.params:>> %s', http_request.params.items())
+        #debug_request(http_request)
+        if http_request.content_type in ('application/json', ) and hasattr(http_request, 'json'):
+            return http_request.json
+        elif http_request.content_type in ('multipart/form-data', 'application/x-www-form-urlencoded'):
+            result = dict()
+            for k, v in http_request.POST.items():
+                if k not in result:
+                    result[k] = v
+                else:
+                    if isinstance(result[k], list):
+                        result[k].append(v)
+                    else:
+                        result[k] = [result[k], v]
+            return result
+        else:
+            raise BadRequest(message="Not supported Content-Type(%s) yet!" % http_request.content_type)
+
+    def _read(self, pk=None, query=None,
+              include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None):
+        """_read: read record(s) from table."""
+        logger.debug('%s:> _read', self.__class__.__name__)
+        logger.debug('pk: %s', pk)
+        logger.debug('query: %s', query)
+        logger.debug('include_fields: %s', include_fields)
+        logger.debug('exclude_fields: %s', exclude_fields)
+        logger.debug('extend_fields: %s', extend_fields)
+        logger.debug('order_by: %s', order_by)
+        logger.debug('begin: %s', begin)
+        logger.debug('limit: %s', limit)
+        join_loads = find_join_loads(self._model_, extend_fields)
+        join_loads = [joinedload(x) for x in join_loads] if join_loads else None
+        logger.debug('join_loads: %s', join_loads)
+        if pk:
+            inst = self._dbsession_.query(self._model_).options(*join_loads).get(pk) if join_loads \
+                else self._dbsession_.query(self._model_).get(pk)
+            if not inst:
+                raise NotFound()
+        else:
+            inst = self._query(query)
+            if join_loads:
+                inst = inst.options(*join_loads)
+        logger.debug('Inst: %s', type(inst))
+        return self._serialize(inst, include_fields=include_fields,
+                               exclude_fields=exclude_fields,
+                               extend_fields=extend_fields,
+                               order_by=order_by,
+                               begin=begin,
+                               limit=limit)
+
+    def _create(self, arguments):
+        """_create: Create record(s)."""
+        logger.debug('%s:> _create', self.__class__.__name__)
+        logger.debug('arguments: %s', arguments)
+        ext_flds = list()
+
+        def _do_create_obj(data):
+            assert isinstance(data, dict)
+            relatedobjs = {}
+            objdata = {}
+
+            for k, v in data.items():
+                if k in self._model_.__table__.c.keys():
+                    objdata[k] = v
+                elif k in self._model_.__mapper__.relationships.keys():
+                    relatedobjs[k] = v
+                else:
+                    pass
+            if not objdata:
+                raise InvalidData(message='Invalid data! Empty object is not allowed!')
+            objdata = self._update_object_data(self._encode_object_data(self._validate_object_data(objdata)))
+            obj = self._model_(**objdata)
+            for k, v in relatedobjs.items():
+                related_instrument = self._model_.__mapper__.relationships[k]
+                related_class = related_instrument.mapper.class_
+                related_class_pk_name = related_class.__table__.primary_key.columns.keys()[0]
+                exits_objs, new_objs, new_obj_datas = None, None, None
+                logger.debug('%s: %s', k, v)
+                if isinstance(v, (list, tuple)):
+                    pks = map(lambda m: m[related_class_pk_name] if isinstance(m, dict) else m,
+                              filter(lambda itm: True if (isinstance(itm, dict) and related_class_pk_name in itm)
+                              or not isinstance(itm, dict) else False, v))
+                    logger.debug('pks = %s', pks)
+                    new_obj_datas = filter(lambda m: isinstance(m, dict) and related_class_pk_name not in m, v)
+                    if pks:
+                        exits_objs = self._dbsession_.query(related_class).\
+                            filter(getattr(related_class, related_class_pk_name).in_(pks)).all()
+                        logger.debug('exits_objs = %s', exits_objs)
+                elif isinstance(v, dict):
+                    if related_class_pk_name in v:
+                        exits_objs = self._dbsession_.query(related_class).get(v[related_class_pk_name])
+                        if not exits_objs:
+                            raise NotFound(message='%s with pk "%s" was not found!' % (k, v))
+                    else:
+                        new_obj_datas = v
+                else:
+                    exits_objs = self._dbsession_.query(related_class).get(v)
+                    if not exits_objs:
+                        raise NotFound(message='%s with pk "%s" was not found!' % (k, v))
+                if new_obj_datas:
+                    if hasattr(related_class, '__handler__'):
+                        #related_handler = getattr(related_class, '__handler__')
+                        related_handler = getattr(related_class, '__handler__')
+                        new_objs, exflds = related_handler(self.application,
+                                                           self.request,
+                                                           __db_session = self._dbsession_,
+                                                           __skip_request=True)._create(new_obj_datas)
+                        #setattr(obj, k, related_objs)
+                        logger.debug('new_objs: %s, exflds: %s', new_objs, exflds)
+                        if exflds:
+                            ext_flds.extend(['.'.join([k, x])for x in exflds])
+                        else:
+                            ext_flds.append(k)
+                    else:
+                        new_objs = related_class(**new_obj_datas) if isinstance(new_obj_datas, dict) \
+                            else [related_class(**xx) for xx in new_obj_datas]
+                        ext_flds.append(k)
+                else:
+                    ext_flds.append(k)
+                related_objs = None
+                if exits_objs:
+                    related_objs = exits_objs
+                if new_objs:
+                    related_objs = new_objs if not related_objs else related_objs+new_objs
+                logger.debug('[%s]related_objs: %s', k, related_objs)
+                setattr(obj, k, related_objs)
+            return obj
+
+        if isinstance(arguments, (list, tuple)):
+            objects = map(_do_create_obj, arguments)
+            self._dbsession_.add_all(objects)
+        else:
+            objects = _do_create_obj(arguments)
+            self._dbsession_.add(objects)
+        logger.debug('objects: %s', objects)
+        self._dbsession_.flush()
+        return objects, list(set(ext_flds))
+
+    def _update(self, arguments, pk=None, query=None):
+        """_update: Update record(s) according to query."""
+        logger.debug('%s:> _update', self.__class__.__name__)
+        logger.debug('pk: %s', pk)
+        logger.debug('query: %s', query)
+        logger.debug('arguments: %s', arguments)
+        result = None
+        ext_flds = list()
+        if pk:
+            inst = self._dbsession_.query(self._model_).get(pk)
+            if not inst:
+                raise NotFound()
+            if not isinstance(arguments, dict) or not arguments:
+                raise InvalidData()
+            arguments = self._validate_object_data(self._encode_object_data(arguments))
+            for k, v in arguments.items():
+                if k in self._meta.readonly:
+                    raise InvalidData(message='Column(%s) is read-only!' % k)
+                setattr(inst, k, v)
+            self._dbsession_.add(inst)
+            result = inst
+        elif query:
+            inst = self._query(query)
+            if not isinstance(arguments, dict) or not arguments:
+                raise InvalidData()
+            arguments = self._validate_object_data(self._encode_object_data(arguments))
+            for k, v in arguments.items():
+                if k in self._meta.readonly:
+                    raise InvalidData(message='Column(%s) is read-only!' % k)
+            inst.update(arguments)
+            result = inst
+        else:
+            pass
+        self._dbsession_.flush()
+        return result, ext_flds
+
+    def _delete(self, pk=None, query=None):
+        """_delete: Delete records from table according to query or pk."""
+        logger.debug('%s:> _delete', self.__class__.__name__)
+        logger.debug('pk: %s', pk)
+        logger.debug('query: %s', query)
+        if pk:
+            inst = self._dbsession_.query(self._model_).get(pk)
+            if not inst:
+                raise NotFound()
+            result = {'__count': 1,
+                      'deleted': [{self._model_.__table__.primary_key.columns.keys()[0]: pk}],
+                      '__model': self._model_.__name__}
+            self._dbsession_.delete(inst)
+        else:
+            inst = self._query(query)
+            result = map(lambda x: x._asdict(), inst.values(*self._model_.__table__.primary_key.columns.values()))
+                #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
+                #         inst.values(self._model_.__table__.primary_key.columns.values()[0]))
+            result = {'__count': len(result),
+                      'deleted': result,
+                      '__model': self._model_.__name__}
+            inst.delete()
+        return result
+
+    ###################################################################################################################
+    # Below is following the RestController of tg to bring the interfaces
+
+    @expose('json')
+    def get_one(self, pk, **kwargs):
+        """
+        get_one         | Display one record.                                          | GET /movies/1
+        """
+        if not pk:
+            abort(400, u"Invalid request!")
+        try:
+            controles, query = query_reparse(self._retrieve_http_query(request))
+            result = self._read(pk=pk, **controles)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(404, u"Object not found!", comment=u"%s" % e)
+        else:
+            return result
+
+    @expose('json')
+    def get_all(self, **kwargs):
+        """
+        get_all         | Display all records in a resource.                           | GET /movies/
+        """
+        controles, query = query_reparse(self._retrieve_http_query(request))
+        #postdata = self._scrach_http_post(request)
+        try:
+            result = self._read(query=query, **controles)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(400)
+        else:
+            return result
+
+    # @expose('json')
+    # def get(self, *args, **kwargs):
+    #     """
+    #     get             | A combo of get_one and get_all.                              | GET /movies/  | GET /movies/1
+    #     """
+    #     debug_request(request)
+    #     return {'args': args, 'kwargs': kwargs}
+
+    @expose('json')
+    def new(self, **kwargs):
+        """
+        new             | Display a page to prompt the User for resource creation.     | GET /movies/new
+        """
+        #controles, query = query_reparse(self._scratch_http_query(request))
+        postdata = self._retrieve_http_post(request)
+        try:
+            result, ext_fields = self._create(postdata)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(400)
+        return self._serialize(result, extend_fields=ext_fields)
+
+    @expose('json')
+    def edit(self, pk, **kwargs):
+        """
+        edit            | Display a page to prompt the User for resource modification. |  GET /movies/1/edit
+        """
+        #controles, query = query_reparse(self._scratch_http_query(request))
+        postdata = self._retrieve_http_post(request)
+        try:
+            result, ext_fields = self._update(postdata, pk=pk)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(404)
+        else:
+            return self._serialize(result, extend_fields=ext_fields)
+
+    @expose('json')
+    def post(self, **kwargs):
+        """
+        post            | Create a new record.                                         | POST /movies/
+        """
+        postdata = self._retrieve_http_post(request)
+        try:
+            result, ext_fields = self._create(postdata)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(400)
+        return self._serialize(result, extend_fields=ext_fields)
+
+    @expose('json')
+    def put(self, pk, **kwargs):
+        """
+        put             | Update an existing record.                                   | POST /movies/1?_method=PUT
+                                                                                       | PUT /movies/1
+        """
+        controles, query = query_reparse(self._retrieve_http_query(request))
+        postdata = self._retrieve_http_post(request)
+        try:
+            result, ext_fields = self._update(postdata, pk=pk)
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(404)
+        else:
+            return self._serialize(result, extend_fields=ext_fields)
+
+    # @expose('json')
+    # def post_delete(self, *args, **kwargs):
+    #     """
+    #     post_delete     | Delete an existing record.                                   | POST /movies/1?_method=DELETE
+    #                                                                                    | DELETE /movies/1
+    #     """
+    #     debug_request(request)
+    #     return {'args': args, 'kwargs': kwargs}
+    #
+    # @expose('json')
+    # def get_delete(self, *args, **kwargs):
+    #     """
+    #     get_delete      | Display a delete Confirmation page.                          | GET /movies/1/delete
+    #     """
+    #     debug_request(request)
+    #     return {'args': args, 'kwargs': kwargs}
+
+    @expose('json')
+    def delete(self, *args, **kwargs):
+        """
+        delete          | A combination of post_delete and get_delete.                 | GET /movies/delete
+                                                                                        | DELETE /movies/1
+                                                                                        | DELETE /movies/
+                                                                                        | POST /movies/1/delete
+                                                                                        | POST /movies/delete
+        """
+        controles, query = query_reparse(self._retrieve_http_query(request))
+        try:
+            if query:
+                result = self._delete(query=query)
+            elif args:
+                result = self._delete(pk=args[0])
+            else:
+                result = self._delete()
+        except NormalError, ne:
+            logger.exception(u'>>> %s', ne)
+            abort(ne._code_, u"%s" % ne)
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            abort(400)
+        else:
+            return result
