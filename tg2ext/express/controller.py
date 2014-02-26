@@ -165,12 +165,19 @@ def build_order_by(cls, order_by):
     """build_order_by: build order by criterias with the given list order_by in strings."""
     ## TODO(SHENMC): Order By ?
     def _gen_order_by(c, by):
-        return None, None
+        desc = False
+        if by and by.startswith('-'):
+            by = by[1:]
+            desc = True
+        if by and by in c.__table__.c.keys():
+            return None, getattr(c, by).desc if desc else getattr(c, by).asc
+        else:
+            return None, None
 
     joins = list()
     order_bys = list()
     if not order_by:
-        return [], []
+        return joins, order_bys
     for x in order_by:
         j, o = _gen_order_by(cls, x)
         if not o:
@@ -408,7 +415,10 @@ class ExpressController(RestController):
             })
             if order_by:
                 ## TODO(SHENMC): Order by not implemented!!!
-                pass
+                logger.debug("Order By: %s", order_by)
+                joins, orderbys = build_order_by(self._model_, order_by)
+                if orderbys:
+                    inst = inst.order_by(*orderbys)
             inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
             result[self._model_.__name__] = serialize(self._model_,
                                                       inst,
