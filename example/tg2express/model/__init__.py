@@ -61,5 +61,5 @@ def init_model(engine):
 
 # Import your model modules here.
 from tg2express.model.auth import User, Group, Permission
-from tg2express.model.notes import DickNote
+from tg2express.model.articles import Article, Comment, Writer
 

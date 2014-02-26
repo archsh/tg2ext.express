@@ -18,10 +18,6 @@ from tg2ext.express.controller import ExpressController
 __all__ = ['RootController']
 
 
-class NoteController(ExpressController):
-    _model_ = model.DickNote
-
-
 class RootController(BaseController):
     """
     The root controller for the tg2express application.
@@ -39,7 +35,10 @@ class RootController(BaseController):
     secc = SecureController()
     admin = AdminController(model, DBSession, config_type=TGAdminConfig)
     error = ErrorController()
-    note = NoteController(dbsession=DBSession)
+
+    writer = ExpressController(model=model.Writer, dbsession=DBSession)
+    article = ExpressController(model=model.Article, dbsession=DBSession)
+    comment = ExpressController(model=model.Comment, dbsession=DBSession)
 
     def _before(self, *args, **kw):
         tmpl_context.project_name = "tg2express"

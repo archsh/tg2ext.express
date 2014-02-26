@@ -58,11 +58,21 @@ def bootstrap(command, conf, vars):
         # <websetup.bootstrap.after.auth>
 
     try:
-        note1 = model.DickNote(title='Test note1', keys='test,note,another', content=u'This is just a test note1')
-        note2 = model.DickNote(title='Test note2', keys='note,another', content=u'This is just a test note2')
-        note3 = model.DickNote(title='Test note3', keys='test,another', content=u'This is just a test note3')
-        note4 = model.DickNote(title='Test note4', keys='test', content=u'This is just a test note4')
-        model.DBSession.add_all([note1, note2, note3, note4])
+        w1 = model.Writer(firstname='Mingcai', lastname='SHEN')
+        w2 = model.Writer(firstname='Fangze', lastname='SHEN')
+        a1 = model.Article(title='Test note1', keys='test,note,another', content=u'This is just a test note1')
+        a2 = model.Article(title='Test note2', keys='note,another', content=u'This is just a test note2')
+        a3 = model.Article(title='Test note3', keys='test,another', content=u'This is just a test note3')
+        a4 = model.Article(title='Test note4', keys='test', content=u'This is just a test note4')
+        c1 = model.Comment(comment='Good! Thanks.')
+        c2 = model.Comment(comment='Well, ok!')
+        a4.comments.append(c1)
+        a4.comments.append(c2)
+        w1.articles.append(a1)
+        w1.articles.append(a3)
+        w2.articles.append(a2)
+        w2.articles.append(a4)
+        model.DBSession.add_all([w1, w2])
         model.DBSession.flush()
         transaction.commit()
     except IntegrityError:
