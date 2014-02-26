@@ -3,6 +3,7 @@
 
 from sqlalchemy import *
 from sqlalchemy.orm import mapper, relation
+from sqlalchemy.orm import column_property
 from sqlalchemy import Table, ForeignKey, Column
 from sqlalchemy.types import Integer, Unicode
 #from sqlalchemy.orm import relation, backref
@@ -22,6 +23,7 @@ class Writer(DeclarativeBase):
     description = Column(Text, nullable=True)
     created = Column(DateTime, default=func.NOW())
     #}
+    fullname = column_property(firstname + " " + lastname)
 
 
 class Article(DeclarativeBase):
