@@ -3,7 +3,8 @@ tg2ext.express
 
 A small extension for TurboGears2
 
-For example:
+For example
+----------------
 
     from tg2ext.express import ExpressController
 
