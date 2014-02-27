@@ -65,7 +65,7 @@ def str2int(s):
 
 
 QUERY_LOOKUPS = ('not', 'contains', 'startswith', 'endswith', 'in', 'range', 'lt', 'lte', 'gt', 'gte',
-                 'year', 'month', 'day', 'hour', 'minute', 'dow', '')
+                 'year', 'month', 'day', 'hour', 'minute', 'dow', )
 
 
 def build_filter(model, key, value, joins=None):
