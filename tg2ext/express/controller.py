@@ -320,7 +320,7 @@ class ExpressController(RestController):
     """
     _model_ = None  # When define an ExpressController, a sqlalchemy model class should be given via _model_
 
-    def __init__(self, model=None, dbsession=None, *args, **kwargs):
+    def __init__(self, model=None, dbsession=None, allow_only=None, *args, **kwargs):
         if model is not None:
             self._model_ = model
         self._dbsession_ = dbsession
@@ -328,6 +328,7 @@ class ExpressController(RestController):
             raise Exception('"_model_" can not be None, must be a valid model class of sqlalchemy!')
         if self._dbsession_ is None:
             raise Exception("A valid db session is required!")
+        self.allow_only = allow_only
         super(ExpressController, self).__init__(*args, **kwargs)
         #super(self, ExpressController).__init__(*args, **kwargs)
 

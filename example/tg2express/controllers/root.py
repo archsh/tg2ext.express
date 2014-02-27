@@ -36,9 +36,12 @@ class RootController(BaseController):
     admin = AdminController(model, DBSession, config_type=TGAdminConfig)
     error = ErrorController()
 
-    writer = ExpressController(model=model.Writer, dbsession=DBSession)
-    article = ExpressController(model=model.Article, dbsession=DBSession)
-    comment = ExpressController(model=model.Comment, dbsession=DBSession)
+    writer = ExpressController(model=model.Writer, dbsession=DBSession,
+                               allow_only=predicates.has_permission('administration'))
+    article = ExpressController(model=model.Article, dbsession=DBSession,
+                                allow_only=predicates.not_anonymous())
+    comment = ExpressController(model=model.Comment, dbsession=DBSession,
+                                allow_only=None)
 
     def _before(self, *args, **kw):
         tmpl_context.project_name = "tg2express"
