@@ -163,7 +163,6 @@ def build_filter(model, key, value, joins=None):
 
 def build_order_by(cls, order_by):
     """build_order_by: build order by criterias with the given list order_by in strings."""
-    ## TODO(SHENMC): Order By ?
     def _gen_order_by(c, by):
         is_desc = False
         if by and by.startswith('-'):
@@ -412,11 +411,8 @@ class ExpressController(RestController):
                 '__begin': begin,
             })
             if order_by:
-                ## TODO(SHENMC): Order by not implemented!!!
-                logger.debug("Order By1: %s", order_by)
                 joins, orderbys = build_order_by(self._model_, order_by)
                 if orderbys:
-                    logger.debug("Order By2: %s", orderbys)
                     inst = inst.order_by(*orderbys)
             inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
             result[self._model_.__name__] = serialize(self._model_,
