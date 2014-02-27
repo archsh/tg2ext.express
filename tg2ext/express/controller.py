@@ -714,16 +714,19 @@ class ExpressController(RestController):
         get_one         | Display one record.                                          | GET /movies/1
         """
         if not pk:
-            abort(400, u"Invalid request!")
+            #abort(400, u"Invalid request!")
+            raise BadRequest()
         try:
             controles, query = query_reparse(self._retrieve_http_query(request))
             result = self._read(pk=pk, **controles)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            #abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(404, u"Object not found!", comment=u"%s" % e)
+            #abort(404, u"Object not found!", comment=u"%s" % e)
+            raise ExpressError(detail=u'%s' % e, title=u'Unknown error!')
         else:
             return result
 
@@ -736,7 +739,7 @@ class ExpressController(RestController):
         #postdata = self._scrach_http_post(request)
         try:
             result = self._read(query=query, **controles)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
@@ -762,7 +765,7 @@ class ExpressController(RestController):
         postdata = self._retrieve_http_post(request)
         try:
             result, ext_fields = self._create(postdata)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
@@ -779,7 +782,7 @@ class ExpressController(RestController):
         postdata = self._retrieve_http_post(request)
         try:
             result, ext_fields = self._update(postdata, pk=pk)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
@@ -796,7 +799,7 @@ class ExpressController(RestController):
         postdata = self._retrieve_http_post(request)
         try:
             result, ext_fields = self._create(postdata)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
@@ -814,7 +817,7 @@ class ExpressController(RestController):
         postdata = self._retrieve_http_post(request)
         try:
             result, ext_fields = self._update(postdata, pk=pk)
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
@@ -857,7 +860,7 @@ class ExpressController(RestController):
                 result = self._delete(pk=args[0])
             else:
                 result = self._delete()
-        except NormalError, ne:
+        except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             abort(ne._code_, u"%s" % ne)
         except Exception, e:
