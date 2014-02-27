@@ -7,7 +7,7 @@ from sqlalchemy import String, Unicode
 from sqlalchemy import and_, or_, func, desc, asc
 from sqlalchemy.orm import joinedload, subqueryload
 from sqlalchemy.sql import expression
-from tg import RestController, expose, request, response, abort
+from tg import RestController, expose, request, response
 from .exceptions import *
 
 logger = logging.getLogger('tgext.express')
@@ -736,15 +736,14 @@ class ExpressController(RestController):
         get_all         | Display all records in a resource.                           | GET /movies/
         """
         controles, query = query_reparse(self._retrieve_http_query(request))
-        #postdata = self._scrach_http_post(request)
         try:
             result = self._read(query=query, **controles)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(400)
+            raise ExpressError(detail=u'%s' % e)
         else:
             return result
 
@@ -767,10 +766,10 @@ class ExpressController(RestController):
             result, ext_fields = self._create(postdata)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(400)
+            raise ExpressError(detail=u'%s' % e)
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
@@ -784,10 +783,10 @@ class ExpressController(RestController):
             result, ext_fields = self._update(postdata, pk=pk)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(404)
+            raise ExpressError(detail=u'%s' % e)
         else:
             return self._serialize(result, extend_fields=ext_fields)
 
@@ -801,10 +800,10 @@ class ExpressController(RestController):
             result, ext_fields = self._create(postdata)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(400)
+            raise ExpressError(detail=u'%s' % e)
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
@@ -819,10 +818,10 @@ class ExpressController(RestController):
             result, ext_fields = self._update(postdata, pk=pk)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(404)
+            raise ExpressError(detail=u'%s' % e)
         else:
             return self._serialize(result, extend_fields=ext_fields)
 
@@ -862,9 +861,9 @@ class ExpressController(RestController):
                 result = self._delete()
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
-            abort(ne._code_, u"%s" % ne)
+            raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            abort(400)
+            raise ExpressError(detail=u'%s' % e)
         else:
             return result
