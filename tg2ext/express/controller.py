@@ -7,7 +7,11 @@ from sqlalchemy import String, Unicode
 from sqlalchemy import and_, or_, func, desc, asc
 from sqlalchemy.orm import joinedload, subqueryload
 from sqlalchemy.sql import expression
+import tg
 from tg import RestController, expose, request, response
+from tg.predicates import NotAuthorizedError, not_anonymous
+
+from tg import predicates
 from .exceptions import *
 
 logger = logging.getLogger('tgext.express')
@@ -320,7 +324,12 @@ class ExpressController(RestController):
     """
     _model_ = None  # When define an ExpressController, a sqlalchemy model class should be given via _model_
 
-    def __init__(self, model=None, dbsession=None, allow_only=None, *args, **kwargs):
+    def __init__(self,
+                 model=None,
+                 dbsession=None,
+                 allow_only=None,
+                 permissions=None,
+                 *args, **kwargs):
         if model is not None:
             self._model_ = model
         self._dbsession_ = dbsession
@@ -328,9 +337,38 @@ class ExpressController(RestController):
             raise Exception('"_model_" can not be None, must be a valid model class of sqlalchemy!')
         if self._dbsession_ is None:
             raise Exception("A valid db session is required!")
-        self.allow_only = allow_only
+        self.allow_only = allow_only or self.allow_only if hasattr(self, 'allow_only') else None
+        self.permissions = permissions or self.permissions if hasattr(self, 'permissions') else None
         super(ExpressController, self).__init__(*args, **kwargs)
         #super(self, ExpressController).__init__(*args, **kwargs)
+
+    #def _failed_authorization(self, reason):
+    #    """
+    #    The BaseController will call this when not authorized.
+    #    """
+    #    raise Unauthorized(detail=reason)
+
+    def _check_permission(self, seckey):
+        permissions = getattr(self, 'permissions', None)
+        if permissions is None:
+            return True
+        predicate = permissions.get('seckey', None)
+        if predicate is None:
+            return True
+        try:
+            predicate.check_authorization(tg.request.environ)
+        except NotAuthorizedError as e:
+            reason = unicode(e)
+            if hasattr(self, '_failed_authorization'):
+                # Should shortcircuit the rest, but if not we will still
+                # deny authorization
+                self._failed_authorization(reason)
+            if not_anonymous().is_met(tg.request.environ):
+                # The user is authenticated but not allowed.
+                raise Forbidden(detail=reason)
+            else:
+                # The user has not been not authenticated.
+                raise Unauthorized(detail=reason)
 
     def _dump_object_(self, obj, **kwargs):
         """
