@@ -753,6 +753,7 @@ class ExpressController(RestController):
             raise BadRequest()
         try:
             controles, query = query_reparse(self._retrieve_http_query(request))
+            self._check_permission('read')
             result = self._read(pk=pk, **controles)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -772,6 +773,7 @@ class ExpressController(RestController):
         """
         controles, query = query_reparse(self._retrieve_http_query(request))
         try:
+            self._check_permission('read')
             result = self._read(query=query, **controles)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -798,6 +800,7 @@ class ExpressController(RestController):
         #controles, query = query_reparse(self._scratch_http_query(request))
         postdata = self._retrieve_http_post(request)
         try:
+            self._check_permission('create')
             result, ext_fields = self._create(postdata)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -815,6 +818,7 @@ class ExpressController(RestController):
         #controles, query = query_reparse(self._scratch_http_query(request))
         postdata = self._retrieve_http_post(request)
         try:
+            self._check_permission('update')
             result, ext_fields = self._update(postdata, pk=pk)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -832,6 +836,7 @@ class ExpressController(RestController):
         """
         postdata = self._retrieve_http_post(request)
         try:
+            self._check_permission('create')
             result, ext_fields = self._create(postdata)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -850,6 +855,7 @@ class ExpressController(RestController):
         controles, query = query_reparse(self._retrieve_http_query(request))
         postdata = self._retrieve_http_post(request)
         try:
+            self._check_permission('update')
             result, ext_fields = self._update(postdata, pk=pk)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
@@ -888,6 +894,7 @@ class ExpressController(RestController):
         """
         controles, query = query_reparse(self._retrieve_http_query(request))
         try:
+            self._check_permission('delete')
             if query:
                 result = self._delete(query=query)
             elif args:
