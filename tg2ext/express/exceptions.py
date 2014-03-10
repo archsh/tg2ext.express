@@ -49,8 +49,7 @@ class ExpressError(WSGIHTTPException):
         return self._make_body(environ, None)
 
     def html_body(self, environ):
-        body = self._make_body(environ, None)
-        return body
+        return self._make_body(environ, None)
 
     def generate_response(self, environ, start_response):
         if self.content_length is not None:
@@ -87,10 +86,10 @@ class ExpressError(WSGIHTTPException):
         return self
 
     def __repr__(self):
-        return "<%s: %d (%s)>" % (self.__class__.__name__, self.code, self.detail)
+        return "<%s: %d (%s)>: %s" % (self.__class__.__name__, self.code, self.title, self.detail)
 
     def __unicode__(self):
-        return u"<%s: %d (%s)>" % (self.__class__.__name__, self.code, self.detail)
+        return u"<%s: %d (%s)>: %s" % (self.__class__.__name__, self.code, self.title, self.detail)
 
 
 class ServerFault(ExpressError):

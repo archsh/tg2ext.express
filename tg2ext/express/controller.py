@@ -348,6 +348,14 @@ class ExpressController(RestController):
     #    """
     #    raise Unauthorized(detail=reason)
 
+    def _before(self, *args, **kw):
+        logger.info('_before>>>>>: args=%s, %s', args, kw)
+        #super(ExpressController, self)._before(*args, **kw)
+
+    def _after(self, *args, **kw):
+        logger.info('_after>>>>>: args=%s, %s', args, kw)
+        #super(ExpressController, self)._after(*args, **kw)
+
     def _check_permission(self, seckey):
         permissions = getattr(self, 'permissions', None)
         if permissions is None:
@@ -381,7 +389,7 @@ class ExpressController(RestController):
         elif isinstance(obj, self._model_):
             return dict([(k, getattr(obj, k)) for k in self._model_.__table__.c.keys()])
         else:
-            raise Exception("Invalid object to dump.")
+            raise FatalError("Invalid object to dump.")
 
     def table_schema(self, *args, **kwargs):
         """
@@ -572,7 +580,7 @@ class ExpressController(RestController):
                         result[k] = [result[k], v]
             return result
         else:
-            raise BadRequest(message="Not supported Content-Type(%s) yet!" % http_request.content_type)
+            raise BadRequest(detail="Not supported Content-Type(%s) yet!" % http_request.content_type)
 
     def _read(self, pk=None, query=None,
               include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None):
@@ -625,7 +633,7 @@ class ExpressController(RestController):
                 else:
                     pass
             if not objdata:
-                raise InvalidData(message='Invalid data! Empty object is not allowed!')
+                raise InvalidData(detail='Invalid data! Empty object is not allowed!')
             objdata = self._update_object_data(self._encode_object_data(self._validate_object_data(objdata)))
             obj = self._model_(**objdata)
             for k, v in relatedobjs.items():
@@ -648,13 +656,13 @@ class ExpressController(RestController):
                     if related_class_pk_name in v:
                         exits_objs = self._dbsession_.query(related_class).get(v[related_class_pk_name])
                         if not exits_objs:
-                            raise NotFound(message='%s with pk "%s" was not found!' % (k, v))
+                            raise NotFound(detail='%s with pk "%s" was not found!' % (k, v))
                     else:
                         new_obj_datas = v
                 else:
                     exits_objs = self._dbsession_.query(related_class).get(v)
                     if not exits_objs:
-                        raise NotFound(message='%s with pk "%s" was not found!' % (k, v))
+                        raise NotFound(detail='%s with pk "%s" was not found!' % (k, v))
                 if new_obj_datas:
                     new_objs = related_class(**new_obj_datas) if isinstance(new_obj_datas, dict) \
                         else [related_class(**xx) for xx in new_obj_datas]
@@ -697,7 +705,7 @@ class ExpressController(RestController):
             arguments = self._validate_object_data(self._encode_object_data(arguments))
             for k, v in arguments.items():
                 if k in self._meta.readonly:
-                    raise InvalidData(message='Column(%s) is read-only!' % k)
+                    raise InvalidData(detail='Column(%s) is read-only!' % k)
                 setattr(inst, k, v)
             self._dbsession_.add(inst)
             result = inst
@@ -708,7 +716,7 @@ class ExpressController(RestController):
             arguments = self._validate_object_data(self._encode_object_data(arguments))
             for k, v in arguments.items():
                 if k in self._meta.readonly:
-                    raise InvalidData(message='Column(%s) is read-only!' % k)
+                    raise InvalidData(detail='Column(%s) is read-only!' % k)
             inst.update(arguments)
             result = inst
         else:

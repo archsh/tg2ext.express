@@ -3,17 +3,17 @@
 
 from tg import expose, flash, require, lurl, request, redirect, tmpl_context
 from tg.i18n import ugettext as _, lazy_ugettext as l_
-from tg import predicates
+from tg import predicates, config
 from tgext.admin.tgadminconfig import TGAdminConfig
 from tgext.admin.controller import AdminController
-
+import logging
 from tg2express import model
 from tg2express.controllers.secure import SecureController
 from tg2express.model import DBSession
 from tg2express.lib.base import BaseController
 from tg2express.controllers.error import ErrorController
 from tg2ext.express.controller import ExpressController
-
+logger = logging.getLogger('tg2express')
 
 __all__ = ['RootController']
 
@@ -44,6 +44,7 @@ class RootController(BaseController):
                                 allow_only=None)
 
     def _before(self, *args, **kw):
+        #logger.info("config: %s", config['tg.app_globals'].sa_engine)
         tmpl_context.project_name = "tg2express"
 
     @expose('tg2express.templates.index')
