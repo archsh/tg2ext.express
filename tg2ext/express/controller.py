@@ -462,7 +462,8 @@ class ExpressController(RestController):
                 joins, orderbys = build_order_by(self._model_, order_by)
                 if orderbys:
                     inst = inst.order_by(*orderbys)
-            inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
+            if limit >= 0:
+                inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
             result[self._model_.__name__] = serialize(self._model_,
                                                       inst,
                                                       include_fields=include_fields, extend_fields=extend_fields)
