@@ -45,6 +45,8 @@ class RootController(BaseController):
 
     def _before(self, *args, **kw):
         #logger.info("config: %s", config['tg.app_globals'].sa_engine)
+        logger.info("args: %s", args)
+        logger.info("kw: %s", kw)
         tmpl_context.project_name = "tg2express"
 
     @expose('tg2express.templates.index')

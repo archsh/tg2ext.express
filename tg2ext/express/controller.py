@@ -14,7 +14,7 @@ from tg.predicates import NotAuthorizedError, not_anonymous
 from tg import predicates
 from .exceptions import *
 
-logger = logging.getLogger('tgext.express')
+logger = logging.getLogger('tg2ext.express')
 
 
 #######################################################################################################################
@@ -323,6 +323,7 @@ class ExpressController(RestController):
     args_params: params via Query in dict.
     """
     _model_ = None  # When define an ExpressController, a sqlalchemy model class should be given via _model_
+    _readonly_fields_ = None
 
     def __init__(self,
                  model=None,
@@ -704,7 +705,7 @@ class ExpressController(RestController):
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
             for k, v in arguments.items():
-                if k in self._meta.readonly:
+                if self._readonly_fields_ and k in self._readonly_fields_:
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
                 setattr(inst, k, v)
             self._dbsession_.add(inst)
@@ -715,7 +716,7 @@ class ExpressController(RestController):
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
             for k, v in arguments.items():
-                if k in self._meta.readonly:
+                if self._readonly_fields_ and k in self._readonly_fields_:
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
             inst.update(arguments)
             result = inst
