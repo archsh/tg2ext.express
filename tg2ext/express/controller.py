@@ -7,6 +7,7 @@ from sqlalchemy import String, Unicode
 from sqlalchemy import and_, or_, func, desc, asc
 from sqlalchemy.orm import joinedload, subqueryload
 from sqlalchemy.sql import expression
+from sqlalchemy import exc as sa_exc
 import tg
 from tg import RestController, expose, request, response
 from tg.predicates import NotAuthorizedError, not_anonymous
@@ -277,7 +278,6 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
             set(include_fields) - set(cls.__table__.c.keys())
         )))
     result = dict((k, getattr(inst, k)) for k in include_fields)
-    # TODO: Extend fields ....
     if extend_fields:
         logger.debug('serialize_object: extend_fields=%s', extend_fields)
         for relkey, relext in restruct_ext_fields(cls, extend_fields).items():
@@ -292,8 +292,6 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
             result[relkey] = serialize_object(rinst.mapper.class_, getattr(inst, relkey),
                                               include_fields=incs,
                                               extend_fields=exts)
-    #for relkey, relobj in cls.__mapper__.relationships.items():
-    #    pass
     return result
 
 
@@ -301,9 +299,6 @@ def serialize_query(cls, inst, include_fields=None, extend_fields=None):
     """serialize_query: serialize a query into a list of object dictionary."""
     if not isinstance(inst, Query):
         return None
-    #include_fields = include_fields or cls.__table__.c.keys()
-    #result = list(inst.values(*[getattr(cls, k) for k in include_fields]))
-    # TODO: Extend fields ....
     return serialize_object(cls, inst.all(), include_fields=include_fields, extend_fields=extend_fields)
 
 
@@ -311,9 +306,24 @@ def serialize(cls, inst, include_fields=None, extend_fields=None):
     """serialize: serialize model object(s) into dictionary(s)."""
     if isinstance(inst, Query):
         inst = inst.all()
-        #return serialize_query(cls, inst, include_fields=include_fields,
-        #                       extend_fields=extend_fields)
     return serialize_object(cls, inst, include_fields=include_fields, extend_fields=extend_fields)
+
+
+def exception_wapper(f):
+    def wrapper_f(self, *args, **kwargs):
+        try:
+            result = f(self, *args, **kwargs)
+        except sa_exc.IntegrityError, e:
+            raise InvalidData(detail=u'%s' % e)
+        except sa_exc.SQLAlchemyError, e:
+            raise FatalError(detail=u'%s' % e)
+        except ExpressError, e:
+            raise e
+        except Exception, e:
+            raise FatalError(detail=u'%s' % e)
+        else:
+            return result
+    return wrapper_f
 
 
 class ExpressController(RestController):
@@ -330,6 +340,7 @@ class ExpressController(RestController):
                  dbsession=None,
                  allow_only=None,
                  permissions=None,
+                 readonly=None,
                  *args, **kwargs):
         if model is not None:
             self._model_ = model
@@ -339,7 +350,9 @@ class ExpressController(RestController):
         if self._dbsession_ is None:
             raise Exception("A valid db session is required!")
         self.allow_only = allow_only or self.allow_only if hasattr(self, 'allow_only') else None
-        self.permissions = permissions or self.permissions if hasattr(self, 'permissions') else None
+        readonly = readonly.split(',') if isinstance(readonly, (str, unicode)) else readonly
+        self._readonly_fields_ = readonly or self._readonly_fields_ if hasattr(self, '_readonly_fields_') else None
+        self._permissions_ = permissions or self._permissions_ if hasattr(self, '_permissions_') else None
         super(ExpressController, self).__init__(*args, **kwargs)
         #super(self, ExpressController).__init__(*args, **kwargs)
 
@@ -350,15 +363,15 @@ class ExpressController(RestController):
     #    raise Unauthorized(detail=reason)
 
     def _before(self, *args, **kw):
-        logger.info('_before>>>>>: args=%s, %s', args, kw)
+        logger.debug('[%s]_before>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
         #super(ExpressController, self)._before(*args, **kw)
 
     def _after(self, *args, **kw):
-        logger.info('_after>>>>>: args=%s, %s', args, kw)
+        logger.debug('[%s]_after>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
         #super(ExpressController, self)._after(*args, **kw)
 
     def _check_permission(self, seckey):
-        permissions = getattr(self, 'permissions', None)
+        permissions = getattr(self, '_permissions_', None)
         if permissions is None:
             return True
         predicate = permissions.get('seckey', None)
@@ -482,22 +495,28 @@ class ExpressController(RestController):
 
     def _validate_object_data(self, object_data):
         assert isinstance(object_data, dict) and object_data
-        # for key, vf in self._meta.validators.items():
-        #     if key in object_data:
-        #         vf(object_data[key])
+        validators = getattr(self, '_validators_', None)
+        if validators:
+            for key, vf in validators.items():
+                if key in object_data:
+                    vf(object_data[key])
         return object_data
 
     def _encode_object_data(self, object_data):
         assert isinstance(object_data, dict) and object_data
-        # for key, vf in self._meta.encoders.items():
-        #     if key in object_data:
-        #         object_data[key] = vf(object_data[key])
+        encoders = getattr(self, '_encoders_', None)
+        if encoders:
+            for key, vf in encoders.items():
+                if key in object_data:
+                    object_data[key] = vf(object_data[key])
         return object_data
 
     def _update_object_data(self, object_data):
         assert isinstance(object_data, dict) and object_data
-        # for key, vf in self._meta.generators.items():
-        #     object_data[key] = vf(object_data[key])
+        generators = getattr(self, '_generators_', None)
+        if generators:
+            for key, vf in generators.items():
+                object_data[key] = vf(object_data[key])
         return object_data
 
     def _build_filter(self, key, value):
@@ -545,7 +564,8 @@ class ExpressController(RestController):
                 inst = inst.filter(or_(*filters))
         return inst
 
-    def _retrieve_http_query(self, http_request):
+    @staticmethod
+    def _retrieve_http_query(http_request):
         """
         Get the HTTP Query items from request object. we don't need the arg_params from request directly some time.
         """
@@ -561,15 +581,19 @@ class ExpressController(RestController):
                     result[k] = [result[k], v]
         return result
 
-    def _retrieve_http_post(self, http_request):
+    @staticmethod
+    def _retrieve_http_post(http_request):
         """
         Get the HTTP Post content from request object. sometimes we don't want TG to do this.
         """
         logger.debug('Request.Content-Type:>> %s', http_request.content_type)
         #logger.debug('Request.params:>> %s', http_request.params.items())
         #debug_request(http_request)
-        if http_request.content_type in ('application/json', ) and hasattr(http_request, 'json'):
-            return http_request.json
+        if http_request.content_type in ('application/json', ):
+            if hasattr(http_request, 'json'):
+                return http_request.json
+            else:
+                raise InvalidData(detail='Invalid JSON Data!')
         elif http_request.content_type in ('multipart/form-data', 'application/x-www-form-urlencoded'):
             result = dict()
             for k, v in http_request.POST.items():
@@ -584,6 +608,7 @@ class ExpressController(RestController):
         else:
             raise BadRequest(detail="Not supported Content-Type(%s) yet!" % http_request.content_type)
 
+    @exception_wapper
     def _read(self, pk=None, query=None,
               include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None):
         """_read: read record(s) from table."""
@@ -616,6 +641,7 @@ class ExpressController(RestController):
                                begin=begin,
                                limit=limit)
 
+    @exception_wapper
     def _create(self, arguments):
         """_create: Create record(s)."""
         logger.debug('%s:> _create', self.__class__.__name__)
@@ -690,13 +716,13 @@ class ExpressController(RestController):
         self._dbsession_.flush()
         return objects, list(set(ext_flds))
 
+    @exception_wapper
     def _update(self, arguments, pk=None, query=None):
         """_update: Update record(s) according to query."""
         logger.debug('%s:> _update', self.__class__.__name__)
         logger.debug('pk: %s', pk)
         logger.debug('query: %s', query)
         logger.debug('arguments: %s', arguments)
-        result = None
         ext_flds = list()
         if pk is not None:
             inst = self._dbsession_.query(self._model_).get(pk)
@@ -724,6 +750,7 @@ class ExpressController(RestController):
         self._dbsession_.flush()
         return result, ext_flds
 
+    @exception_wapper
     def _delete(self, pk=None, query=None):
         """_delete: Delete records from table according to query or pk."""
         logger.debug('%s:> _delete', self.__class__.__name__)
@@ -770,7 +797,7 @@ class ExpressController(RestController):
         except Exception, e:
             logger.exception(u'>>> %s', e)
             #abort(404, u"Object not found!", comment=u"%s" % e)
-            raise ExpressError(detail=u'%s' % e, title=u'Unknown error!')
+            raise FatalError(detail=u'%s' % e, title=u'Unknown error!')
         else:
             return result
 
@@ -788,7 +815,7 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
+            raise FatalError(detail=u'%s' % e)
         else:
             return result
 
@@ -854,7 +881,7 @@ class ExpressController(RestController):
                 raise ne
             except Exception, e:
                 logger.exception(u'>>> %s', e)
-                raise ExpressError(detail=u'%s' % e)
+                raise FatalError(detail=u'%s' % e)
         else:
             try:
                 self._check_permission('create')
@@ -864,7 +891,7 @@ class ExpressController(RestController):
                 raise ne
             except Exception, e:
                 logger.exception(u'>>> %s', e)
-                raise ExpressError(detail=u'%s' % e)
+                raise FatalError(detail=u'%s' % e)
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
@@ -883,7 +910,7 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
+            raise FatalError(detail=u'%s' % e)
         else:
             return self._serialize(result, extend_fields=ext_fields)
 
@@ -925,6 +952,6 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
+            raise FatalError(detail=u'%s' % e)
         else:
             return result

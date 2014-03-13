@@ -13,7 +13,7 @@ class ExpressError(WSGIHTTPException):
     # code = 200
     # title = 'OK'
     # explanation = 'why this happens'
-    code = None
+    code = 500
     title = "Unknown Error!"
     explanation = ''
 
