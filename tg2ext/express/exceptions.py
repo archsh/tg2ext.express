@@ -14,8 +14,8 @@ class ExpressError(WSGIHTTPException):
     # title = 'OK'
     # explanation = 'why this happens'
     code = 500
-    title = "Unknown Error!"
-    explanation = ''
+    title = U"Unknown Error!"
+    explanation = U''
 
     ## Set this to True for responses that should have no request body
     empty_body = False

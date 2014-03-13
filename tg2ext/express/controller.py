@@ -314,12 +314,16 @@ def exception_wapper(f):
         try:
             result = f(self, *args, **kwargs)
         except sa_exc.IntegrityError, e:
+            self._dbsession_.rollback()
             raise InvalidData(detail=u'%s' % e)
         except sa_exc.SQLAlchemyError, e:
+            self._dbsession_.rollback()
             raise FatalError(detail=u'%s' % e)
         except ExpressError, e:
+            self._dbsession_.rollback()
             raise e
         except Exception, e:
+            self._dbsession_.rollback()
             raise FatalError(detail=u'%s' % e)
         else:
             return result
