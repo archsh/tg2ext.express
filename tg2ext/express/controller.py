@@ -710,7 +710,7 @@ class ExpressController(RestController):
                 setattr(inst, k, v)
             self._dbsession_.add(inst)
             result = inst
-        elif query:
+        else:
             inst = self._query(query)
             if not isinstance(arguments, dict) or not arguments:
                 raise InvalidData()
@@ -720,8 +720,6 @@ class ExpressController(RestController):
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
             inst.update(arguments)
             result = inst
-        else:
-            pass
         self._dbsession_.flush()
         return result, ext_flds
 
@@ -801,42 +799,42 @@ class ExpressController(RestController):
     #     debug_request(request)
     #     return {'args': args, 'kwargs': kwargs}
 
-    @expose('json')
-    def new(self, **kwargs):
-        """
-        new             | Display a page to prompt the User for resource creation.     | GET /movies/new
-        """
-        #controles, query = query_reparse(self._scratch_http_query(request))
-        postdata = self._retrieve_http_post(request)
-        try:
-            self._check_permission('create')
-            result, ext_fields = self._create(postdata)
-        except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
-            raise ne
-        except Exception, e:
-            logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
-        return self._serialize(result, extend_fields=ext_fields)
-
-    @expose('json')
-    def edit(self, pk, **kwargs):
-        """
-        edit            | Display a page to prompt the User for resource modification. |  GET /movies/1/edit
-        """
-        #controles, query = query_reparse(self._scratch_http_query(request))
-        postdata = self._retrieve_http_post(request)
-        try:
-            self._check_permission('update')
-            result, ext_fields = self._update(postdata, pk=pk)
-        except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
-            raise ne
-        except Exception, e:
-            logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
-        else:
-            return self._serialize(result, extend_fields=ext_fields)
+    # @expose('json')
+    # def new(self, **kwargs):
+    #     """
+    #     new             | Display a page to prompt the User for resource creation.     | GET /movies/new
+    #     """
+    #     #controles, query = query_reparse(self._scratch_http_query(request))
+    #     postdata = self._retrieve_http_post(request)
+    #     try:
+    #         self._check_permission('create')
+    #         result, ext_fields = self._create(postdata)
+    #     except ExpressError, ne:
+    #         logger.exception(u'>>> %s', ne)
+    #         raise ne
+    #     except Exception, e:
+    #         logger.exception(u'>>> %s', e)
+    #         raise ExpressError(detail=u'%s' % e)
+    #     return self._serialize(result, extend_fields=ext_fields)
+    #
+    # @expose('json')
+    # def edit(self, pk, **kwargs):
+    #     """
+    #     edit            | Display a page to prompt the User for resource modification. |  GET /movies/1/edit
+    #     """
+    #     #controles, query = query_reparse(self._scratch_http_query(request))
+    #     postdata = self._retrieve_http_post(request)
+    #     try:
+    #         self._check_permission('update')
+    #         result, ext_fields = self._update(postdata, pk=pk)
+    #     except ExpressError, ne:
+    #         logger.exception(u'>>> %s', ne)
+    #         raise ne
+    #     except Exception, e:
+    #         logger.exception(u'>>> %s', e)
+    #         raise ExpressError(detail=u'%s' % e)
+    #     else:
+    #         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
     def post(self, **kwargs):
@@ -856,7 +854,7 @@ class ExpressController(RestController):
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
-    def put(self, pk, **kwargs):
+    def put(self, pk=None, **kwargs):
         """
         put             | Update an existing record.                                   | POST /movies/1?_method=PUT
                                                                                        | PUT /movies/1
@@ -865,7 +863,7 @@ class ExpressController(RestController):
         postdata = self._retrieve_http_post(request)
         try:
             self._check_permission('update')
-            result, ext_fields = self._update(postdata, pk=pk)
+            result, ext_fields = self._update(postdata, pk=pk, query=query)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             raise ne
