@@ -598,7 +598,7 @@ class ExpressController(RestController):
         join_loads = find_join_loads(self._model_, extend_fields)
         join_loads = [joinedload(x) for x in join_loads] if join_loads else None
         logger.debug('join_loads: %s', join_loads)
-        if pk:
+        if pk is not None:
             inst = self._dbsession_.query(self._model_).options(*join_loads).get(pk) if join_loads \
                 else self._dbsession_.query(self._model_).get(pk)
             if not inst:
@@ -697,7 +697,7 @@ class ExpressController(RestController):
         logger.debug('arguments: %s', arguments)
         result = None
         ext_flds = list()
-        if pk:
+        if pk is not None:
             inst = self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
@@ -728,7 +728,7 @@ class ExpressController(RestController):
         logger.debug('%s:> _delete', self.__class__.__name__)
         logger.debug('pk: %s', pk)
         logger.debug('query: %s', query)
-        if pk:
+        if pk is not None:
             inst = self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
@@ -755,7 +755,7 @@ class ExpressController(RestController):
         """
         get_one         | Display one record.                                          | GET /movies/1
         """
-        if not pk:
+        if pk is None:
             #abort(400, u"Invalid request!")
             raise BadRequest()
         try:
@@ -837,20 +837,33 @@ class ExpressController(RestController):
     #         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
-    def post(self, **kwargs):
+    def post(self, pk=None, **kwargs):
         """
         post            | Create a new record.                                         | POST /movies/
         """
         postdata = self._retrieve_http_post(request)
-        try:
-            self._check_permission('create')
-            result, ext_fields = self._create(postdata)
-        except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
-            raise ne
-        except Exception, e:
-            logger.exception(u'>>> %s', e)
-            raise ExpressError(detail=u'%s' % e)
+        if not postdata:
+            raise InvalidData()
+        if pk is not None:
+            try:
+                self._check_permission('update')
+                result, ext_fields = self._update(postdata, pk=pk)
+            except ExpressError, ne:
+                logger.exception(u'>>> %s', ne)
+                raise ne
+            except Exception, e:
+                logger.exception(u'>>> %s', e)
+                raise ExpressError(detail=u'%s' % e)
+        else:
+            try:
+                self._check_permission('create')
+                result, ext_fields = self._create(postdata)
+            except ExpressError, ne:
+                logger.exception(u'>>> %s', ne)
+                raise ne
+            except Exception, e:
+                logger.exception(u'>>> %s', e)
+                raise ExpressError(detail=u'%s' % e)
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
@@ -891,7 +904,7 @@ class ExpressController(RestController):
     #     return {'args': args, 'kwargs': kwargs}
 
     @expose('json')
-    def delete(self, *args, **kwargs):
+    def delete(self, pk=None, **kwargs):
         """
         delete          | A combination of post_delete and get_delete.                 | GET /movies/delete
                                                                                         | DELETE /movies/1
@@ -902,12 +915,10 @@ class ExpressController(RestController):
         controles, query = query_reparse(self._retrieve_http_query(request))
         try:
             self._check_permission('delete')
-            if query:
-                result = self._delete(query=query)
-            elif args:
-                result = self._delete(pk=args[0])
+            if pk is not None:
+                result = self._delete(pk=pk)
             else:
-                result = self._delete()
+                result = self._delete(query=query)
         except ExpressError, ne:
             logger.exception(u'>>> %s', ne)
             raise ne
