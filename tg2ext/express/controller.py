@@ -481,6 +481,7 @@ class ExpressController(RestController):
                     inst = inst.order_by(*orderbys)
             if limit >= 0:
                 inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
+            result['__count'] = inst.count()
             result[self._model_.__name__] = serialize(self._model_,
                                                       inst,
                                                       include_fields=include_fields, extend_fields=extend_fields)
