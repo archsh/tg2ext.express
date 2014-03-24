@@ -216,7 +216,7 @@ def find_join_loads(cls, extend_fields):
     return result
 
 
-def query_reparse(query):
+def query_reparse(query, internal_filters=None):
     """query_reparse: reparse the query.
     Returns controls dictionary and re-constructed query dictionary.
     """
@@ -237,6 +237,8 @@ def query_reparse(query):
             new_query['__default'][k] = v
         else:
             new_query['_'.join(ks)] = dict(zip(ks, v.split('|')))
+    if internal_filters:
+        new_query['__default'].update(internal_filters)
     return controls, new_query
 
 
@@ -338,6 +340,9 @@ class ExpressController(RestController):
     """
     _model_ = None  # When define an ExpressController, a sqlalchemy model class should be given via _model_
     _readonly_fields_ = None
+    _subcontrollers_ = None
+    _internal_filters_ = None
+    _permissions_ = None
 
     def __init__(self,
                  model=None,
@@ -345,7 +350,8 @@ class ExpressController(RestController):
                  allow_only=None,
                  permissions=None,
                  readonly=None,
-                 *args, **kwargs):
+                 subcontrollers=None,
+                 **kwargs):
         if model is not None:
             self._model_ = model
         self._dbsession_ = dbsession
@@ -354,17 +360,34 @@ class ExpressController(RestController):
         if self._dbsession_ is None:
             raise Exception("A valid db session is required!")
         self.allow_only = allow_only or self.allow_only if hasattr(self, 'allow_only') else None
-        readonly = readonly.split(',') if isinstance(readonly, (str, unicode)) else readonly
-        self._readonly_fields_ = readonly or self._readonly_fields_ if hasattr(self, '_readonly_fields_') else None
-        self._permissions_ = permissions or self._permissions_ if hasattr(self, '_permissions_') else None
-        super(ExpressController, self).__init__(*args, **kwargs)
-        #super(self, ExpressController).__init__(*args, **kwargs)
+        if isinstance(readonly, bool):
+            self._table_readonly_ = readonly
+            self._readonly_fields_ = None
+        elif isinstance(readonly, (str, unicode, list, tuple)):
+            readonly = readonly.split(',') if isinstance(readonly, (str, unicode)) else readonly
+            self._readonly_fields_ = readonly or self._readonly_fields_ if hasattr(self, '_readonly_fields_') else None
+            self._table_readonly_ = False
+        elif readonly is None:
+            self._table_readonly_ = False
+            self._readonly_fields_ = None
+        else:
+            raise Exception('Invalid value of readonly(%s)' % readonly)
 
-    #def _failed_authorization(self, reason):
-    #    """
-    #    The BaseController will call this when not authorized.
-    #    """
-    #    raise Unauthorized(detail=reason)
+        self._permissions_ = permissions or self._permissions_ if hasattr(self, '_permissions_') else None
+        self._subcontrollers_ = subcontrollers
+        self._internal_filters_ = kwargs
+
+    def _lookup(self, pk=None, extra=None, *reminders):
+        logger.debug('_lookup: pk=%s, extra=%s, reminders=%s', pk, extra, reminders)
+        ## How to lookup ?
+        ## ${pk}/${extra}
+        ##
+        if pk is None:
+            pass
+        elif extra is not None:
+            pass
+        else:
+            pass
 
     def _before(self, *args, **kw):
         logger.debug('[%s]_before>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
@@ -792,7 +815,8 @@ class ExpressController(RestController):
             #abort(400, u"Invalid request!")
             raise BadRequest()
         try:
-            controles, query = query_reparse(self._retrieve_http_query(request))
+            controles, query = query_reparse(self._retrieve_http_query(request),
+                                             internal_filters=self._internal_filters_)
             self._check_permission('read')
             result = self._read(pk=pk, **controles)
         except ExpressError, ne:
@@ -811,7 +835,8 @@ class ExpressController(RestController):
         """
         get_all         | Display all records in a resource.                           | GET /movies/
         """
-        controles, query = query_reparse(self._retrieve_http_query(request))
+        controles, query = query_reparse(self._retrieve_http_query(request),
+                                         internal_filters=self._internal_filters_)
         try:
             self._check_permission('read')
             result = self._read(query=query, **controles)
@@ -837,7 +862,8 @@ class ExpressController(RestController):
     #     """
     #     new             | Display a page to prompt the User for resource creation.     | GET /movies/new
     #     """
-    #     #controles, query = query_reparse(self._scratch_http_query(request))
+    #     #controles, query = query_reparse(self._scratch_http_query(request),
+    #                                          internal_filters=self._internal_filters_)
     #     postdata = self._retrieve_http_post(request)
     #     try:
     #         self._check_permission('create')
@@ -855,7 +881,8 @@ class ExpressController(RestController):
     #     """
     #     edit            | Display a page to prompt the User for resource modification. |  GET /movies/1/edit
     #     """
-    #     #controles, query = query_reparse(self._scratch_http_query(request))
+    #     #controles, query = query_reparse(self._scratch_http_query(request),
+    #                                          internal_filters=self._internal_filters_)
     #     postdata = self._retrieve_http_post(request)
     #     try:
     #         self._check_permission('update')
@@ -874,6 +901,8 @@ class ExpressController(RestController):
         """
         post            | Create a new record.                                         | POST /movies/
         """
+        if self._table_readonly_:
+            raise Forbidden("Table is Read-Only!")
         postdata = self._retrieve_http_post(request)
         if not postdata:
             raise InvalidData()
@@ -905,7 +934,10 @@ class ExpressController(RestController):
         put             | Update an existing record.                                   | POST /movies/1?_method=PUT
                                                                                        | PUT /movies/1
         """
-        controles, query = query_reparse(self._retrieve_http_query(request))
+        if self._table_readonly_:
+            raise Forbidden("Table is Read-Only!")
+        controles, query = query_reparse(self._retrieve_http_query(request),
+                                         internal_filters=self._internal_filters_)
         postdata = self._retrieve_http_post(request)
         try:
             self._check_permission('update')
@@ -945,7 +977,10 @@ class ExpressController(RestController):
                                                                                         | POST /movies/1/delete
                                                                                         | POST /movies/delete
         """
-        controles, query = query_reparse(self._retrieve_http_query(request))
+        if self._table_readonly_:
+            raise Forbidden("Table is Read-Only!")
+        controles, query = query_reparse(self._retrieve_http_query(request),
+                                         internal_filters=self._internal_filters_)
         try:
             self._check_permission('delete')
             if pk is not None:
