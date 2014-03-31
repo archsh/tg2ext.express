@@ -855,7 +855,7 @@ class ExpressController(RestController):
             result = {'__count': len(result),
                       'deleted': result,
                       '__model': self._model_.__name__}
-            inst.delete()
+            inst.delete(synchronize_session='fetch')
         self._after_delete(result['deleted'])
         return result
 
