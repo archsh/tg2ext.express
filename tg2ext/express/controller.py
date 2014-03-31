@@ -317,16 +317,16 @@ def exception_wapper(f):
             result = f(self, *args, **kwargs)
         except sa_exc.IntegrityError, e:
             self._dbsession_.rollback()
-            raise InvalidData(detail=u'%s' % e)
+            raise InvalidData(detail=str(e))
         except sa_exc.SQLAlchemyError, e:
             self._dbsession_.rollback()
-            raise FatalError(detail=u'%s' % e)
+            raise FatalError(detail=str(e))
         except ExpressError, e:
             self._dbsession_.rollback()
             raise e
         except Exception, e:
             self._dbsession_.rollback()
-            raise FatalError(detail=u'%s' % e)
+            raise FatalError(detail=str(e))
         else:
             return result
     return wrapper_f
@@ -407,7 +407,7 @@ class ExpressController(RestController):
         try:
             predicate.check_authorization(tg.request.environ)
         except NotAuthorizedError as e:
-            reason = unicode(e)
+            reason = str(e)
             if hasattr(self, '_failed_authorization'):
                 # Should shortcircuit the rest, but if not we will still
                 # deny authorization
@@ -826,7 +826,7 @@ class ExpressController(RestController):
         except Exception, e:
             logger.exception(u'>>> %s', e)
             #abort(404, u"Object not found!", comment=u"%s" % e)
-            raise FatalError(detail=u'%s' % e, title=u'Unknown error!')
+            raise FatalError(detail=str(e), title=u'Unknown error!')
         else:
             return result
 
@@ -845,7 +845,7 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise FatalError(detail=u'%s' % e)
+            raise FatalError(detail=str(e))
         else:
             return result
 
@@ -873,7 +873,7 @@ class ExpressController(RestController):
     #         raise ne
     #     except Exception, e:
     #         logger.exception(u'>>> %s', e)
-    #         raise ExpressError(detail=u'%s' % e)
+    #         raise ExpressError(detail=str(e))
     #     return self._serialize(result, extend_fields=ext_fields)
     #
     # @expose('json')
@@ -892,7 +892,7 @@ class ExpressController(RestController):
     #         raise ne
     #     except Exception, e:
     #         logger.exception(u'>>> %s', e)
-    #         raise ExpressError(detail=u'%s' % e)
+    #         raise ExpressError(detail=str(e))
     #     else:
     #         return self._serialize(result, extend_fields=ext_fields)
 
@@ -915,7 +915,7 @@ class ExpressController(RestController):
                 raise ne
             except Exception, e:
                 logger.exception(u'>>> %s', e)
-                raise FatalError(detail=u'%s' % e)
+                raise FatalError(detail=str(e))
         else:
             try:
                 self._check_permission('create')
@@ -925,7 +925,7 @@ class ExpressController(RestController):
                 raise ne
             except Exception, e:
                 logger.exception(u'>>> %s', e)
-                raise FatalError(detail=u'%s' % e)
+                raise FatalError(detail=str(e))
         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
@@ -947,7 +947,7 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise FatalError(detail=u'%s' % e)
+            raise FatalError(detail=str(e))
         else:
             return self._serialize(result, extend_fields=ext_fields)
 
@@ -992,6 +992,6 @@ class ExpressController(RestController):
             raise ne
         except Exception, e:
             logger.exception(u'>>> %s', e)
-            raise FatalError(detail=u'%s' % e)
+            raise FatalError(detail=str(e))
         else:
             return result
