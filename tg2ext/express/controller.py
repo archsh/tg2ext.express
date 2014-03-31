@@ -317,15 +317,19 @@ def exception_wapper(f):
         try:
             result = f(self, *args, **kwargs)
         except sa_exc.IntegrityError, e:
+            logger.exception(e)
             self._dbsession_.rollback()
             raise InvalidData(detail=str(e))
         except sa_exc.SQLAlchemyError, e:
+            logger.exception(e)
             self._dbsession_.rollback()
             raise FatalError(detail=str(e))
         except ExpressError, e:
+            logger.exception(e)
             self._dbsession_.rollback()
             raise e
         except Exception, e:
+            logger.exception(e)
             self._dbsession_.rollback()
             raise FatalError(detail=str(e))
         else:
@@ -400,39 +404,39 @@ class ExpressController(RestController):
         #super(ExpressController, self)._after(*args, **kw)
 
     ####################################################################################################################
-    def _before_read(self, pk=None, query=None):
+    def _before_read(self, pk=None, query=None, **kwargs):
         logger.debug('[%s]_before_read> pk=%s, query=%s',
                      self.__class__.__name__, pk, query)
 
-    def _before_update(self, inst, arguments):
+    def _before_update(self, inst, arguments, **kwargs):
         logger.debug('[%s]_before_update> inst=%s, arguments=%s',
                      self.__class__.__name__,
                      inst, arguments)
 
-    def _before_create(self, objects):
+    def _before_create(self, objects, **kwargs):
         logger.debug('[%s]_before_create> objects=%s',
                      self.__class__.__name__,
                      objects)
 
-    def _before_delete(self, inst):
+    def _before_delete(self, inst, **kwargs):
         logger.debug('[%s]_before_delete> inst=%s',
                      self.__class__.__name__,
                      inst)
 
-    def _after_read(self, inst):
+    def _after_read(self, inst, **kwargs):
         logger.debug('[%s]_after_read> inst=%s',
                      self.__class__.__name__, inst)
 
-    def _after_update(self, inst):
+    def _after_update(self, inst, **kwargs):
         logger.debug('[%s]_after_update> inst=%s',
                      self.__class__.__name__, inst)
 
-    def _after_create(self, objects):
+    def _after_create(self, objects, **kwargs):
         logger.debug('[%s]_after_create> objects=%s',
                      self.__class__.__name__,
                      objects)
 
-    def _after_delete(self, deletes):
+    def _after_delete(self, deletes, **kwargs):
         logger.debug('[%s]_after_delete> deletes=%s',
                      self.__class__.__name__, deletes)
 
@@ -775,15 +779,15 @@ class ExpressController(RestController):
                     related_objs = new_objs if not related_objs else related_objs + new_objs
                 logger.debug('[%s]related_objs: %s', k, related_objs)
                 setattr(obj, k, related_objs)
+            self._before_create(obj, **data)
             return obj
 
         if isinstance(arguments, (list, tuple)):
             objects = map(_do_create_obj, arguments)
-            self._before_create(objects)
             self._dbsession_.add_all(objects)
         else:
             objects = _do_create_obj(arguments)
-            self._before_create(objects)
+            self._before_create(objects, **arguments)
             self._dbsession_.add(objects)
         logger.debug('objects: %s', objects)
         self._dbsession_.flush()
