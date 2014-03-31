@@ -409,10 +409,10 @@ class ExpressController(RestController):
                      self.__class__.__name__,
                      inst, arguments)
 
-    def _before_create(self, arguments):
-        logger.debug('[%s]_before_create> arguments=%s',
+    def _before_create(self, objects):
+        logger.debug('[%s]_before_create> objects=%s',
                      self.__class__.__name__,
-                     arguments)
+                     objects)
 
     def _before_delete(self, inst):
         logger.debug('[%s]_before_delete> inst=%s',
@@ -734,7 +734,6 @@ class ExpressController(RestController):
             if not objdata:
                 raise InvalidData(detail='Invalid data! Empty object is not allowed!')
             objdata = self._update_object_data(self._encode_object_data(self._validate_object_data(objdata)))
-            self._before_create(objdata)
             obj = self._model_(**objdata)
             for k, v in relatedobjs.items():
                 related_instrument = self._model_.__mapper__.relationships[k]
@@ -780,9 +779,11 @@ class ExpressController(RestController):
 
         if isinstance(arguments, (list, tuple)):
             objects = map(_do_create_obj, arguments)
+            self._before_create(objects)
             self._dbsession_.add_all(objects)
         else:
             objects = _do_create_obj(arguments)
+            self._before_create(objects)
             self._dbsession_.add(objects)
         logger.debug('objects: %s', objects)
         self._dbsession_.flush()
