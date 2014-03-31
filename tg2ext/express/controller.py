@@ -137,7 +137,7 @@ def build_filter(model, key, value, joins=None):
                     elif exop == 'gte':
                         exp = expression.extract(op.upper(), field) >= int(value)
                     elif exop == 'in':
-                        exp = expression.extract(op.upper(), field).in_(map(lambda x:int(x),
+                        exp = expression.extract(op.upper(), field).in_(map(lambda x: int(x),
                                                                             value if isinstance(value, (list, tuple))
                                                                             else str2list(value)))
                     elif exop == 'range':
@@ -168,6 +168,7 @@ def build_filter(model, key, value, joins=None):
 
 def build_order_by(cls, order_by):
     """build_order_by: build order by criterias with the given list order_by in strings."""
+
     def _gen_order_by(c, by):
         is_desc = False
         if by and by.startswith('-'):
@@ -194,6 +195,7 @@ def build_order_by(cls, order_by):
 
 def find_join_loads(cls, extend_fields):
     """find_join_loads: find the relationships from extend_fields which we can call joinloads for EagerLoad..."""
+
     def _relations_(c, exts):
         if not exts:
             return None
@@ -243,7 +245,6 @@ def query_reparse(query, internal_filters=None):
 
 
 def restruct_ext_fields(cls, extend_fields):
-
     def _f_(s):
         ss = s.split('.', 1)
         logger.debug('_f_: %s', ss)
@@ -329,6 +330,7 @@ def exception_wapper(f):
             raise FatalError(detail=str(e))
         else:
             return result
+
     return wrapper_f
 
 
@@ -399,40 +401,40 @@ class ExpressController(RestController):
 
     ####################################################################################################################
     def _before_read(self, pk=None, query=None):
-        logger.info('[%s]_before_read> pk=%s, query=%s',
-                    self.__class__.__name__, pk, query)
+        logger.debug('[%s]_before_read> pk=%s, query=%s',
+                     self.__class__.__name__, pk, query)
 
     def _before_update(self, inst, arguments):
-        logger.info('[%s]_before_update> inst=%s, arguments=%s',
-                    self.__class__.__name__,
-                    inst, arguments)
+        logger.debug('[%s]_before_update> inst=%s, arguments=%s',
+                     self.__class__.__name__,
+                     inst, arguments)
 
     def _before_create(self, arguments):
-        logger.info('[%s]_before_create> arguments=%s',
-                    self.__class__.__name__,
-                    arguments)
+        logger.debug('[%s]_before_create> arguments=%s',
+                     self.__class__.__name__,
+                     arguments)
 
     def _before_delete(self, inst):
-        logger.info('[%s]_before_delete> inst=%s',
-                    self.__class__.__name__,
-                    inst)
+        logger.debug('[%s]_before_delete> inst=%s',
+                     self.__class__.__name__,
+                     inst)
 
     def _after_read(self, inst):
-        logger.info('[%s]_after_read> inst=%s',
-                    self.__class__.__name__, inst)
+        logger.debug('[%s]_after_read> inst=%s',
+                     self.__class__.__name__, inst)
 
     def _after_update(self, inst):
-        logger.info('[%s]_after_update> inst=%s',
-                    self.__class__.__name__, inst)
+        logger.debug('[%s]_after_update> inst=%s',
+                     self.__class__.__name__, inst)
 
     def _after_create(self, objects):
-        logger.info('[%s]_after_create> objects=%s',
-                    self.__class__.__name__,
-                    objects)
+        logger.debug('[%s]_after_create> objects=%s',
+                     self.__class__.__name__,
+                     objects)
 
     def _after_delete(self, deletes):
-        logger.info('[%s]_after_delete> deletes=%s',
-                    self.__class__.__name__, deletes)
+        logger.debug('[%s]_after_delete> deletes=%s',
+                     self.__class__.__name__, deletes)
 
     ####################################################################################################################
 
@@ -542,12 +544,12 @@ class ExpressController(RestController):
                 if orderbys:
                     inst = inst.order_by(*orderbys)
             if limit >= 0:
-                inst = inst.slice(begin, begin+limit)  # inst[begin:begin+limit]
+                inst = inst.slice(begin, begin + limit)  # inst[begin:begin+limit]
             result['__count'] = inst.count()
             result[self._model_.__name__] = serialize(self._model_,
                                                       inst,
                                                       include_fields=include_fields, extend_fields=extend_fields)
-             # list(inst.values(*[getattr(self._model_, x) for x in include_fields]))
+            # list(inst.values(*[getattr(self._model_, x) for x in include_fields]))
         else:
             logger.debug("Inst >>> %s", inst)
             logger.debug("Include Fields: %s", include_fields)
@@ -557,7 +559,7 @@ class ExpressController(RestController):
                 result['__count'] = len(objs)
             else:
                 result[self._model_.__name__] = objs
-            # dict([(k, getattr(inst, k)) for k in include_fields])
+                # dict([(k, getattr(inst, k)) for k in include_fields])
         return result
 
     def _validate_object_data(self, object_data):
@@ -747,7 +749,7 @@ class ExpressController(RestController):
                     logger.debug('pks = %s', pks)
                     new_obj_datas = filter(lambda m: isinstance(m, dict) and related_class_pk_name not in m, v)
                     if pks:
-                        exits_objs = self._dbsession_.query(related_class).\
+                        exits_objs = self._dbsession_.query(related_class). \
                             filter(getattr(related_class, related_class_pk_name).in_(pks)).all()
                         logger.debug('exits_objs = %s', exits_objs)
                 elif isinstance(v, dict):
@@ -771,7 +773,7 @@ class ExpressController(RestController):
                 if exits_objs:
                     related_objs = exits_objs
                 if new_objs:
-                    related_objs = new_objs if not related_objs else related_objs+new_objs
+                    related_objs = new_objs if not related_objs else related_objs + new_objs
                 logger.debug('[%s]related_objs: %s', k, related_objs)
                 setattr(obj, k, related_objs)
             return obj
@@ -843,8 +845,8 @@ class ExpressController(RestController):
             inst = self._query(query)
             self._before_delete(inst)
             result = map(lambda x: x._asdict(), inst.values(*self._model_.__table__.primary_key.columns.values()))
-                #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
-                #         inst.values(self._model_.__table__.primary_key.columns.values()[0]))
+            #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
+            #         inst.values(self._model_.__table__.primary_key.columns.values()[0]))
             result = {'__count': len(result),
                       'deleted': result,
                       '__model': self._model_.__name__}
