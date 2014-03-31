@@ -397,6 +397,45 @@ class ExpressController(RestController):
         logger.debug('[%s]_after>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
         #super(ExpressController, self)._after(*args, **kw)
 
+    ####################################################################################################################
+    def _before_read(self, pk=None, query=None):
+        logger.info('[%s]_before_read> pk=%s, query=%s',
+                    self.__class__.__name__, pk, query)
+
+    def _before_update(self, inst, arguments):
+        logger.info('[%s]_before_update> inst=%s, arguments=%s',
+                    self.__class__.__name__,
+                    inst, arguments)
+
+    def _before_create(self, arguments):
+        logger.info('[%s]_before_create> arguments=%s',
+                    self.__class__.__name__,
+                    arguments)
+
+    def _before_delete(self, inst):
+        logger.info('[%s]_before_delete> inst=%s',
+                    self.__class__.__name__,
+                    inst)
+
+    def _after_read(self, inst):
+        logger.info('[%s]_after_read> inst=%s',
+                    self.__class__.__name__, inst)
+
+    def _after_update(self, inst):
+        logger.info('[%s]_after_update> inst=%s',
+                    self.__class__.__name__, inst)
+
+    def _after_create(self, objects):
+        logger.info('[%s]_after_create> objects=%s',
+                    self.__class__.__name__,
+                    objects)
+
+    def _after_delete(self, deletes):
+        logger.info('[%s]_after_delete> deletes=%s',
+                    self.__class__.__name__, deletes)
+
+    ####################################################################################################################
+
     def _check_permission(self, seckey):
         permissions = getattr(self, '_permissions_', None)
         if permissions is None:
@@ -652,6 +691,7 @@ class ExpressController(RestController):
         join_loads = find_join_loads(self._model_, extend_fields)
         join_loads = [joinedload(x) for x in join_loads] if join_loads else None
         logger.debug('join_loads: %s', join_loads)
+        self._before_read(pk=pk, query=query)
         if pk is not None:
             inst = self._dbsession_.query(self._model_).options(*join_loads).get(pk) if join_loads \
                 else self._dbsession_.query(self._model_).get(pk)
@@ -662,6 +702,7 @@ class ExpressController(RestController):
             if join_loads:
                 inst = inst.options(*join_loads)
         logger.debug('Inst: %s', type(inst))
+        self._after_read(inst)
         return self._serialize(inst, include_fields=include_fields,
                                exclude_fields=exclude_fields,
                                extend_fields=extend_fields,
@@ -691,6 +732,7 @@ class ExpressController(RestController):
             if not objdata:
                 raise InvalidData(detail='Invalid data! Empty object is not allowed!')
             objdata = self._update_object_data(self._encode_object_data(self._validate_object_data(objdata)))
+            self._before_create(objdata)
             obj = self._model_(**objdata)
             for k, v in relatedobjs.items():
                 related_instrument = self._model_.__mapper__.relationships[k]
@@ -742,6 +784,7 @@ class ExpressController(RestController):
             self._dbsession_.add(objects)
         logger.debug('objects: %s', objects)
         self._dbsession_.flush()
+        self._after_create(objects)
         return objects, list(set(ext_flds))
 
     @exception_wapper
@@ -759,6 +802,7 @@ class ExpressController(RestController):
             if not isinstance(arguments, dict) or not arguments:
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
+            self._before_update(inst, arguments)
             for k, v in arguments.items():
                 if self._readonly_fields_ and k in self._readonly_fields_:
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
@@ -770,12 +814,14 @@ class ExpressController(RestController):
             if not isinstance(arguments, dict) or not arguments:
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
+            self._before_update(inst, arguments)
             for k, v in arguments.items():
                 if self._readonly_fields_ and k in self._readonly_fields_:
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
             inst.update(arguments)
             result = inst
         self._dbsession_.flush()
+        self._after_update(inst)
         return result, ext_flds
 
     @exception_wapper
@@ -788,12 +834,14 @@ class ExpressController(RestController):
             inst = self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
+            self._before_delete(inst)
             result = {'__count': 1,
                       'deleted': [{self._model_.__table__.primary_key.columns.keys()[0]: pk}],
                       '__model': self._model_.__name__}
             self._dbsession_.delete(inst)
         else:
             inst = self._query(query)
+            self._before_delete(inst)
             result = map(lambda x: x._asdict(), inst.values(*self._model_.__table__.primary_key.columns.values()))
                 #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
                 #         inst.values(self._model_.__table__.primary_key.columns.values()[0]))
@@ -801,6 +849,7 @@ class ExpressController(RestController):
                       'deleted': result,
                       '__model': self._model_.__name__}
             inst.delete()
+        self._after_delete(result['deleted'])
         return result
 
     ###################################################################################################################
