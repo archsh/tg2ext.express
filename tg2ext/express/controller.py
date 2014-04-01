@@ -365,23 +365,27 @@ class ExpressController(RestController):
             raise Exception('"_model_" can not be None, must be a valid model class of sqlalchemy!')
         if self._dbsession_ is None:
             raise Exception("A valid db session is required!")
-        self.allow_only = allow_only or self.allow_only if hasattr(self, 'allow_only') else None
+        if allow_only is not None:
+            self.allow_only = allow_only
         if isinstance(readonly, bool):
             self._table_readonly_ = readonly
             self._readonly_fields_ = None
         elif isinstance(readonly, (str, unicode, list, tuple)):
             readonly = readonly.split(',') if isinstance(readonly, (str, unicode)) else readonly
-            self._readonly_fields_ = readonly or self._readonly_fields_ if hasattr(self, '_readonly_fields_') else None
+            if readonly is not None:
+                self._readonly_fields_ = readonly
             self._table_readonly_ = False
         elif readonly is None:
             self._table_readonly_ = False
             self._readonly_fields_ = None
         else:
             raise Exception('Invalid value of readonly(%s)' % readonly)
-
-        self._permissions_ = permissions or self._permissions_ if hasattr(self, '_permissions_') else None
-        self._subcontrollers_ = subcontrollers
-        self._internal_filters_ = kwargs
+        if permissions is not None:
+            self._permissions_ = permissions
+        if subcontrollers is not None:
+            self._subcontrollers_ = subcontrollers
+        if kwargs:
+            self._internal_filters_ = kwargs
 
     def _lookup(self, pk=None, extra=None, *reminders):
         logger.debug('_lookup: pk=%s, extra=%s, reminders=%s', pk, extra, reminders)
