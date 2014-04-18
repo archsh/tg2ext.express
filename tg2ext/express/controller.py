@@ -275,10 +275,10 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
     if not isinstance(inst, cls):
         return inst
     logger.debug('serialize_object> extend_fields: %s', extend_fields)
-    include_fields = list(set(include_fields or cls.__table__.c.keys()) | set(cls.__table__.primary_key.columns.keys()))
-    if not set(include_fields) <= set(cls.__table__.c.keys()):
+    include_fields = list(set(include_fields or cls.__mapper__.c.keys()) | set(cls.__table__.primary_key.columns.keys()))
+    if not set(include_fields) <= set(cls.__mapper__.c.keys()):
         raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
-            set(include_fields) - set(cls.__table__.c.keys())
+            set(include_fields) - set(cls.__mapper__.c.keys())
         )))
     result = dict((k, getattr(inst, k)) for k in include_fields)
     if extend_fields:
@@ -287,8 +287,8 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
             rinst = cls.__mapper__.relationships[relkey]
             logger.debug('====> %s: %s', relkey, relext)
             #if rinst.direction.name in ('MANYTOONE', 'ONETOONE'):
-            incs = filter(lambda x: x.find('.') < 0 and x in rinst.mapper.class_.__table__.c.keys(), relext)
-            #[relext] if (relext and relext.find('.') < 0 and relext in rinst.mapper.class_.__table__.c.keys()) else None
+            incs = filter(lambda x: x.find('.') < 0 and x in rinst.mapper.class_.__mapper__.c.keys(), relext)
+            #[relext] if (relext and relext.find('.') < 0 and relext in rinst.mapper.class_.__mapper__.c.keys()) else None
             exts = filter(lambda x: x.find('.') > 0 or x in rinst.mapper.class_.__mapper__.relationships.keys(), relext)
             #[relext] if relext and incs is None else None
             logger.debug('inc=%s, ext=%s', incs, exts)
@@ -533,7 +533,7 @@ class ExpressController(RestController):
 
         #if meta.invisible:
         #    exclude_fields = exclude_fields.extend(meta.invisible) if exclude_fields else meta.invisible
-        include_fields = list((set(include_fields or self._model_.__table__.columns.keys()) - set(exclude_fields or []))
+        include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys()) - set(exclude_fields or []))
                               | set(self._model_.__table__.primary_key.columns.keys()))
         if extend_fields:
             logger.debug('extend_fields: %s', extend_fields)
