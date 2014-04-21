@@ -276,10 +276,10 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
         return inst
     logger.debug('serialize_object> extend_fields: %s', extend_fields)
     include_fields = list(set(include_fields or cls.__mapper__.c.keys()) | set(cls.__table__.primary_key.columns.keys()))
-    if not set(include_fields) <= set(cls.__mapper__.c.keys()):
-        raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
-            set(include_fields) - set(cls.__mapper__.c.keys())
-        )))
+    #if not set(include_fields) <= set(cls.__mapper__.c.keys()):
+    #    raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
+    #        set(include_fields) - set(cls.__mapper__.c.keys())
+    #    )))
     result = dict((k, getattr(inst, k)) for k in include_fields)
     if extend_fields:
         logger.debug('serialize_object: extend_fields=%s', extend_fields)
@@ -357,6 +357,7 @@ class ExpressController(RestController):
                  permissions=None,
                  readonly=None,
                  subcontrollers=None,
+                 extra_attrs=None,
                  **kwargs):
         if model is not None:
             self._model_ = model
@@ -380,6 +381,10 @@ class ExpressController(RestController):
             self._readonly_fields_ = None
         else:
             raise Exception('Invalid value of readonly(%s)' % readonly)
+        if extra_attrs is not None:
+            self.extra_attrs = extra_attrs if isinstance(extra_attrs, (list, tuple)) else extra_attrs.split(',')
+        else:
+            self.extra_attrs = None
         if permissions is not None:
             self._permissions_ = permissions
         if subcontrollers is not None:
@@ -533,8 +538,15 @@ class ExpressController(RestController):
 
         #if meta.invisible:
         #    exclude_fields = exclude_fields.extend(meta.invisible) if exclude_fields else meta.invisible
-        include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys()) - set(exclude_fields or []))
-                              | set(self._model_.__table__.primary_key.columns.keys()))
+        #include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys())
+        # - set(exclude_fields or []))
+        #                      | set(self._model_.__table__.primary_key.columns.keys()))
+        if include_fields is None:
+            include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys())
+                                   - set(exclude_fields or []))
+                                  | set(self._model_.__table__.primary_key.columns.keys()))
+            if self.extra_attrs:
+                include_fields.extend(self.extra_attrs)
         if extend_fields:
             logger.debug('extend_fields: %s', extend_fields)
             pass
