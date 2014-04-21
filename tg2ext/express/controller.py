@@ -541,7 +541,7 @@ class ExpressController(RestController):
         #include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys())
         # - set(exclude_fields or []))
         #                      | set(self._model_.__table__.primary_key.columns.keys()))
-        if include_fields is None:
+        if not include_fields:
             include_fields = list((set(include_fields or self._model_.__mapper__.columns.keys())
                                    - set(exclude_fields or []))
                                   | set(self._model_.__table__.primary_key.columns.keys()))
