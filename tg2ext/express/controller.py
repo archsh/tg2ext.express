@@ -663,6 +663,16 @@ class ExpressController(RestController):
                     result[k].append(v)
                 else:
                     result[k] = [result[k], v]
+        for k, v in result.items():
+            if isinstance(v, (str, unicode)):
+                if v == 'null':
+                    result[k] = None
+                elif v == 'true':
+                    result[k] = True
+                elif v == 'false':
+                    result[k] = False
+                else:
+                    continue
         return result
 
     @staticmethod
