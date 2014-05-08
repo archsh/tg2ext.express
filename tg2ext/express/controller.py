@@ -359,6 +359,9 @@ class ExpressController(RestController):
                  readonly=None,
                  subcontrollers=None,
                  extra_attrs=None,
+                 validators=None,
+                 deseralizers=None,
+                 serializers=None,
                  **kwargs):
         if model is not None:
             self._model_ = model
@@ -390,6 +393,12 @@ class ExpressController(RestController):
             self._permissions_ = permissions
         if subcontrollers is not None:
             self._subcontrollers_ = subcontrollers
+        if validators is not None:
+            self._validators_ = validators
+        if serializers is not None:
+            self._serializers_ = serializers
+        if deseralizers is not None:
+            self._deserializers_ = deseralizers
         if kwargs:
             self._internal_filters_ = kwargs
 
