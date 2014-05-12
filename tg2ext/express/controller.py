@@ -222,7 +222,7 @@ def query_reparse(query, internal_filters=None):
     """query_reparse: reparse the query.
     Returns controls dictionary and re-constructed query dictionary.
     """
-    if not query or not isinstance(query, dict):
+    if not internal_filters and (not query or not isinstance(query, dict)):
         return {}, {}
     new_query = {'__default': {}}
     controls = {
