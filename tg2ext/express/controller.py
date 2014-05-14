@@ -1110,7 +1110,6 @@ class ExpressController(RestController):
         aggregate   /   A aggragation of data rows
                     | GET /movies/aggregate?__count=id&__sum=num,amount&__avg=price&__max=price&__min=price&__group_by=date&[filters]
         """
-        #controles, query = query_reparse(self._retrieve_http_query(request), internal_filters=self._internal_filters_)
         query = query or dict()
         columns = list()
         group_by_columns = list()
