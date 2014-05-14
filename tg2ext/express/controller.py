@@ -719,7 +719,7 @@ class ExpressController(RestController):
 
     @exception_wapper
     def _read(self, pk=None, query=None,
-              include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None):
+              include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None, **kwargs):
         """_read: read record(s) from table."""
         logger.debug('%s:> _read', self.__class__.__name__)
         logger.debug('pk: %s', pk)
