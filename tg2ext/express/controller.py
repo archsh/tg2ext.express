@@ -1152,6 +1152,6 @@ class ExpressController(RestController):
             '__model': self._model_.__name__,
             '__total': len(result),
             '__count': len(result),
-            'self._model_.__name__': result,
+            self._model_.__name__: result,
         }
         return result
