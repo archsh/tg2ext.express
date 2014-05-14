@@ -37,9 +37,9 @@ class RootController(BaseController):
     error = ErrorController()
 
     writer = ExpressController(model=model.Writer, dbsession=DBSession,
-                               allow_only=predicates.has_permission('administration'))
+                               allow_only=None)  # predicates.has_permission('administration'))
     article = ExpressController(model=model.Article, dbsession=DBSession,
-                                allow_only=predicates.not_anonymous())
+                                allow_only=None)  # predicates.not_anonymous())
     comment = ExpressController(model=model.Comment, dbsession=DBSession,
                                 allow_only=None)
 

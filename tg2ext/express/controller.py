@@ -229,6 +229,12 @@ def query_reparse(query, internal_filters=None):
         'include_fields': str2list(query.pop('__include_fields', None)),
         'exclude_fields': str2list(query.pop('__exclude_fields', None)),
         'extend_fields': str2list(query.pop('__extend_fields', None)),
+        'count_fields': str2list(query.pop('__count', None)),
+        'sum_fields': str2list(query.pop('__sum', None)),
+        'avg_fields': str2list(query.pop('__avg', None)),
+        'min_fields': str2list(query.pop('__min', None)),
+        'max_fields': str2list(query.pop('__max', None)),
+        'group_by_fields': str2list(query.pop('__group_by', None)),
         'begin': str2int(query.pop('__begin', 0)),
         'limit': str2int(query.pop('__limit', None)),
         'order_by': str2list(query.pop('__order_by', None))
@@ -619,10 +625,10 @@ class ExpressController(RestController):
         logger.debug('_build_filter >>> %s | %s', flt, jns)
         return flt, jns
 
-    def _query(self, query=None):
+    def _query(self, *columns, **query):
         """_query: return a Query instance according to the giving query data.
         """
-        inst = self._dbsession_.query(self._model_)
+        inst = self._dbsession_.query(self._model_) if not columns else self._dbsession_.query(*columns)
         if not query:
             return inst
         default_query = query.pop('__default', None)
@@ -734,7 +740,7 @@ class ExpressController(RestController):
             if not inst:
                 raise NotFound()
         else:
-            inst = self._query(query)
+            inst = self._query(**query) if query else self._query()
             if join_loads:
                 inst = inst.options(*join_loads)
         logger.debug('Inst: %s', type(inst))
@@ -847,7 +853,7 @@ class ExpressController(RestController):
             self._dbsession_.add(inst)
             result = inst
         else:
-            inst = self._query(query)
+            inst = self._query(**query) if query else self._query()
             if not isinstance(arguments, dict) or not arguments:
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
@@ -877,7 +883,7 @@ class ExpressController(RestController):
                       '__model': self._model_.__name__}
             self._dbsession_.delete(inst)
         else:
-            inst = self._query(query)
+            inst = self._query(**query) if query else self._query()
             self._before_delete(inst)
             result = map(lambda x: x._asdict(), inst.values(*self._model_.__table__.primary_key.columns.values()))
             #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
@@ -1081,3 +1087,71 @@ class ExpressController(RestController):
             raise FatalError(detail=str(e))
         else:
             return result
+
+    @expose('json')
+    def aggregate(self, **kwargs):
+        controles, query = query_reparse(self._retrieve_http_query(request),
+                                         internal_filters=self._internal_filters_)
+        try:
+            self._check_permission('read')
+            result = self._aggregate(query=query, **controles)
+        except ExpressError, ne:
+            logger.exception(u'>>> %s', ne)
+            raise ne
+        except Exception, e:
+            logger.exception(u'>>> %s', e)
+            raise FatalError(detail=str(e))
+        else:
+            return result
+
+    #@expose('json')
+    def _aggregate(self, query=None, **controles):
+        """
+        aggregate   /   A aggragation of data rows
+                    | GET /movies/aggregate?__count=id&__sum=num,amount&__avg=price&__max=price&__min=price&__group_by=date&[filters]
+        """
+        #controles, query = query_reparse(self._retrieve_http_query(request), internal_filters=self._internal_filters_)
+        query = query or dict()
+        columns = list()
+        group_by_columns = list()
+        counts = controles.get('count_fields', None)
+        if counts:
+            for c in counts:
+                columns.append(('_'.join(['__count', c]), func.Count(getattr(self._model_, c))))
+        maxes = controles.get('max_fields', None)
+        if maxes:
+            for c in maxes:
+                columns.append(('_'.join(['__max', c]), func.Max(getattr(self._model_, c))))
+        mins = controles.get('min_fields', None)
+        if mins:
+            for c in mins:
+                columns.append(('_'.join(['__min', c]), func.Min(getattr(self._model_, c))))
+        avges = controles.get('avg_fields', None)
+        if avges:
+            for c in avges:
+                columns.append(('_'.join(['__avg', c]), func.Avg(getattr(self._model_, c))))
+        sums = controles.get('sum_fields', None)
+        if sums:
+            for c in sums:
+                columns.append(('_'.join(['__sum', c]), func.Sum(getattr(self._model_, c))))
+        group_bys = controles.get('group_by_fields', None)
+        if group_bys:
+            for c in group_bys:
+                group_by_columns.append(getattr(self._model_, c))
+        if group_by_columns:
+            queried_rows = self._query(*(group_by_columns+[x[1] for x in columns]), **query).group_by(*group_by_columns)
+            result = queried_rows.all()
+            result = map(lambda row: dict(map(None, group_bys+[x[0] for x in columns], row)), result)
+        else:
+            queried_rows = self._query(*[x[1] for x in columns], **query)
+            result = queried_rows.all()
+            result = map(lambda row: dict(map(None, [x[0] for x in columns], row)), result)
+        result = {
+            '__type': 'Aggregation',
+            '__ref': request.path,
+            '__model': self._model_.__name__,
+            '__total': len(result),
+            '__count': len(result),
+            'self._model_.__name__': result,
+        }
+        return result

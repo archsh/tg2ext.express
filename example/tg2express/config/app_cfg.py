@@ -25,7 +25,7 @@ base_config.prefer_toscawidgets2 = True
 
 base_config.package = tg2express
 
-print sys.path.append('../')
+sys.path.append('../')
 #Enable json in expose
 base_config.renderers.append('json')
 #Enable genshi in expose to have a lingua franca for extensions and pluggable apps
