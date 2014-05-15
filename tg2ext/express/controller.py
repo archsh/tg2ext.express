@@ -5,14 +5,14 @@ from sqlalchemy.orm.query import Query
 from sqlalchemy import Column, Integer, SmallInteger, BigInteger
 from sqlalchemy import String, Unicode
 from sqlalchemy import and_, or_, func, desc, asc
-from sqlalchemy.orm import joinedload, subqueryload
+from sqlalchemy.orm import joinedload  # , subqueryload
 from sqlalchemy.sql import expression
 from sqlalchemy import exc as sa_exc
 import tg
-from tg import RestController, expose, request, response
+from tg import RestController, expose, request  # , response
 from tg.predicates import NotAuthorizedError, not_anonymous
 
-from tg import predicates
+# from tg import predicates
 from .exceptions import *
 
 logger = logging.getLogger('tg2ext.express')
@@ -74,7 +74,7 @@ QUERY_LOOKUPS = ('not', 'contains', 'startswith', 'endswith', 'in', 'range', 'lt
 
 
 def build_filter(model, key, value, joins=None):
-    logger.debug('build_filter>>> %s | %s | %s | %s', model, key, value, joins)
+    # logger.debug('build_filter>>> %s | %s | %s | %s', model, key, value, joins)
     if not key:
         raise InvalidExpression(message='Invalid Expression!')  # return None, None
 
@@ -155,7 +155,7 @@ def build_filter(model, key, value, joins=None):
                 raise InvalidExpression(message='Invalid Expression!')  # return None, None
             return ~exp if _not_ else exp, joins
     elif k1 in model.__mapper__.relationships.keys() and key:  # Check if this is a relationship
-        logger.debug('go relationships: %s, %s', k1, joins)
+        #logger.debug('go relationships: %s, %s', k1, joins)
         relationship = getattr(model, k1)
         if joins:
             joins.append(relationship)
@@ -253,34 +253,34 @@ def query_reparse(query, internal_filters=None):
 def restruct_ext_fields(cls, extend_fields):
     def _f_(s):
         ss = s.split('.', 1)
-        logger.debug('_f_: %s', ss)
+        #logger.debug('_f_: %s', ss)
         return ss[0], ss[1] if len(ss) == 2 else None
 
     if not extend_fields:
         return {}
     result = {}
     for x, y in map(_f_, extend_fields):
-        logger.debug('[1]restruct_ext_fields> %s: %s', x, y)
+        #logger.debug('[1]restruct_ext_fields> %s: %s', x, y)
         if x not in cls.__mapper__.relationships.keys():
             continue
         if x not in result:
             result[x] = [y] if y else []
         elif y:
             result[x].append(y)
-    logger.debug('[2]restruct_ext_fields> %s: %s', cls, result)
+    #logger.debug('[2]restruct_ext_fields> %s: %s', cls, result)
     return result
 
 
 def serialize_object(cls, inst, include_fields=None, extend_fields=None):
     """serialize_object: serialize a single object from model instance into a dictionary.
     """
-    logger.debug('Inst: %s | %s', inst, type(inst))
+    #logger.debug('Inst: %s | %s', inst, type(inst))
     if isinstance(inst, (list, tuple, types.GeneratorType)):
         return map(lambda x: serialize_object(cls, x, include_fields=include_fields, extend_fields=extend_fields),
                    inst)
     if not isinstance(inst, cls):
         return inst
-    logger.debug('serialize_object> extend_fields: %s', extend_fields)
+    #logger.debug('serialize_object> extend_fields: %s', extend_fields)
     include_fields = include_fields or cls.__table__.c.keys()
     include_fields = list(set(include_fields) | set(cls.__table__.primary_key.columns.keys()))
     #if not set(include_fields) <= set(cls.__mapper__.c.keys()):
@@ -289,16 +289,16 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
     #    )))
     result = dict((k, getattr(inst, k)) for k in include_fields)
     if extend_fields:
-        logger.debug('serialize_object: extend_fields=%s', extend_fields)
+        #logger.debug('serialize_object: extend_fields=%s', extend_fields)
         for relkey, relext in restruct_ext_fields(cls, extend_fields).items():
             rinst = cls.__mapper__.relationships[relkey]
-            logger.debug('====> %s: %s', relkey, relext)
+            #logger.debug('====> %s: %s', relkey, relext)
             #if rinst.direction.name in ('MANYTOONE', 'ONETOONE'):
             incs = filter(lambda x: x.find('.') < 0 and x in rinst.mapper.class_.__mapper__.c.keys(), relext)
             #[relext] if (relext and relext.find('.') < 0 and relext in rinst.mapper.class_.__mapper__.c.keys()) else None
             exts = filter(lambda x: x.find('.') > 0 or x in rinst.mapper.class_.__mapper__.relationships.keys(), relext)
             #[relext] if relext and incs is None else None
-            logger.debug('inc=%s, ext=%s', incs, exts)
+            #logger.debug('inc=%s, ext=%s', incs, exts)
             result[relkey] = serialize_object(rinst.mapper.class_, getattr(inst, relkey),
                                               include_fields=incs,
                                               extend_fields=exts)
@@ -409,7 +409,7 @@ class ExpressController(RestController):
             self._internal_filters_ = kwargs
 
     def _lookup(self, pk=None, extra=None, *reminders):
-        logger.debug('_lookup: pk=%s, extra=%s, reminders=%s', pk, extra, reminders)
+        #logger.debug('_lookup: pk=%s, extra=%s, reminders=%s', pk, extra, reminders)
         ## How to lookup ?
         ## ${pk}/${extra}
         ##
@@ -421,49 +421,47 @@ class ExpressController(RestController):
             pass
 
     def _before(self, *args, **kw):
-        logger.debug('[%s]_before>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
+        #logger.debug('[%s]_before>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
         #super(ExpressController, self)._before(*args, **kw)
+        pass
 
     def _after(self, *args, **kw):
-        logger.debug('[%s]_after>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
+        #logger.debug('[%s]_after>>>>>: args=%s, %s', self.__class__.__name__, args, kw)
         #super(ExpressController, self)._after(*args, **kw)
+        pass
 
     ####################################################################################################################
     def _before_read(self, pk=None, query=None, **kwargs):
-        logger.debug('[%s]_before_read> pk=%s, query=%s',
-                     self.__class__.__name__, pk, query)
+        #logger.debug('[%s]_before_read> pk=%s, query=%s', self.__class__.__name__, pk, query)
+        pass
 
     def _before_update(self, inst, arguments, **kwargs):
-        logger.debug('[%s]_before_update> inst=%s, arguments=%s',
-                     self.__class__.__name__,
-                     inst, arguments)
+        #logger.debug('[%s]_before_update> inst=%s, arguments=%s', self.__class__.__name__, inst, arguments)
+        pass
 
     def _before_create(self, objects, **kwargs):
-        logger.debug('[%s]_before_create> objects=%s',
-                     self.__class__.__name__,
-                     objects)
+        #logger.debug('[%s]_before_create> objects=%s', self.__class__.__name__, objects)
+        pass
 
     def _before_delete(self, inst, **kwargs):
-        logger.debug('[%s]_before_delete> inst=%s',
-                     self.__class__.__name__,
-                     inst)
+        #logger.debug('[%s]_before_delete> inst=%s', self.__class__.__name__, inst)
+        pass
 
     def _after_read(self, inst, **kwargs):
-        logger.debug('[%s]_after_read> inst=%s',
-                     self.__class__.__name__, inst)
+        #logger.debug('[%s]_after_read> inst=%s', self.__class__.__name__, inst)
+        pass
 
     def _after_update(self, inst, **kwargs):
-        logger.debug('[%s]_after_update> inst=%s',
-                     self.__class__.__name__, inst)
+        #logger.debug('[%s]_after_update> inst=%s', self.__class__.__name__, inst)
+        pass
 
     def _after_create(self, objects, **kwargs):
-        logger.debug('[%s]_after_create> objects=%s',
-                     self.__class__.__name__,
-                     objects)
+        #logger.debug('[%s]_after_create> objects=%s', self.__class__.__name__, objects)
+        pass
 
     def _after_delete(self, deletes, **kwargs):
-        logger.debug('[%s]_after_delete> deletes=%s',
-                     self.__class__.__name__, deletes)
+        #logger.debug('[%s]_after_delete> deletes=%s', self.__class__.__name__, deletes)
+        pass
 
     ####################################################################################################################
 
@@ -558,14 +556,15 @@ class ExpressController(RestController):
                                - set(exclude_fields or []))
                               | set(self._model_.__table__.primary_key.columns.keys()))
         if extend_fields:
-            logger.debug('extend_fields: %s', extend_fields)
+            #logger.debug('extend_fields: %s', extend_fields)
             pass
         if isinstance(inst, Query):
             begin = begin or 0
             limit = 50 if limit is None else limit
+            count = inst.count()
             result.update({
-                '__total': inst.count(),
-                '__count': inst.count(),
+                '__total': count,
+                '__count': count,
                 '__limit': limit,
                 '__begin': begin,
             })
@@ -575,14 +574,14 @@ class ExpressController(RestController):
                     inst = inst.order_by(*orderbys)
             if limit >= 0:
                 inst = inst.slice(begin, begin + limit)  # inst[begin:begin+limit]
-            result['__count'] = inst.count()
+                result['__count'] = limit if count > limit else count
             result[self._model_.__name__] = serialize(self._model_,
                                                       inst,
                                                       include_fields=include_fields, extend_fields=extend_fields)
             # list(inst.values(*[getattr(self._model_, x) for x in include_fields]))
         else:
-            logger.debug("Inst >>> %s", inst)
-            logger.debug("Include Fields: %s", include_fields)
+            #logger.debug("Inst >>> %s", inst)
+            #logger.debug("Include Fields: %s", include_fields)
             objs = serialize(self._model_, inst, include_fields=include_fields, extend_fields=extend_fields)
             if isinstance(objs, (list, tuple)):
                 result[self._model_.__name__] = objs
@@ -622,7 +621,7 @@ class ExpressController(RestController):
         assert key
         flt, jns = build_filter(self._model_,
                                 key.split('.') if isinstance(key, (str, unicode)) else key, value, joins=None)
-        logger.debug('_build_filter >>> %s | %s', flt, jns)
+        #logger.debug('_build_filter >>> %s | %s', flt, jns)
         return flt, jns
 
     def _query(self, *columns, **query):
@@ -641,8 +640,8 @@ class ExpressController(RestController):
                     filters.append(f)
                     if j is not None:
                         joins.extend(j)
-            logger.debug('[default] filters: %s', filters)
-            logger.debug('[default] joins: %s', joins)
+            #logger.debug('[default] filters: %s', filters)
+            #logger.debug('[default] joins: %s', joins)
             for j in joins:
                 inst = inst.join(j)
             if filters:
@@ -655,8 +654,8 @@ class ExpressController(RestController):
                     filters.append(f)
                     if j is not None:
                         joins.extend(j)
-            logger.debug('[%s] filters: %s', pair, filters)
-            logger.debug('[%s] joins: %s', pair, joins)
+            #logger.debug('[%s] filters: %s', pair, filters)
+            #logger.debug('[%s] joins: %s', pair, joins)
             for j in joins:
                 inst = inst.join(j)
             if filters:
@@ -695,7 +694,7 @@ class ExpressController(RestController):
         """
         Get the HTTP Post content from request object. sometimes we don't want TG to do this.
         """
-        logger.debug('Request.Content-Type:>> %s', http_request.content_type)
+        #logger.debug('Request.Content-Type:>> %s', http_request.content_type)
         #logger.debug('Request.params:>> %s', http_request.params.items())
         #debug_request(http_request)
         if http_request.content_type in ('application/json', ):
@@ -721,18 +720,18 @@ class ExpressController(RestController):
     def _read(self, pk=None, query=None,
               include_fields=None, exclude_fields=None, extend_fields=None, order_by=None, begin=None, limit=None, **kwargs):
         """_read: read record(s) from table."""
-        logger.debug('%s:> _read', self.__class__.__name__)
-        logger.debug('pk: %s', pk)
-        logger.debug('query: %s', query)
-        logger.debug('include_fields: %s', include_fields)
-        logger.debug('exclude_fields: %s', exclude_fields)
-        logger.debug('extend_fields: %s', extend_fields)
-        logger.debug('order_by: %s', order_by)
-        logger.debug('begin: %s', begin)
-        logger.debug('limit: %s', limit)
+        # logger.debug('%s:> _read', self.__class__.__name__)
+        # logger.debug('pk: %s', pk)
+        # logger.debug('query: %s', query)
+        # logger.debug('include_fields: %s', include_fields)
+        # logger.debug('exclude_fields: %s', exclude_fields)
+        # logger.debug('extend_fields: %s', extend_fields)
+        # logger.debug('order_by: %s', order_by)
+        # logger.debug('begin: %s', begin)
+        # logger.debug('limit: %s', limit)
         join_loads = find_join_loads(self._model_, extend_fields)
         join_loads = [joinedload(x) for x in join_loads] if join_loads else None
-        logger.debug('join_loads: %s', join_loads)
+        # logger.debug('join_loads: %s', join_loads)
         self._before_read(pk=pk, query=query)
         if pk is not None:
             inst = self._dbsession_.query(self._model_).options(*join_loads).get(pk) if join_loads \
@@ -743,7 +742,7 @@ class ExpressController(RestController):
             inst = self._query(**query) if query else self._query()
             if join_loads:
                 inst = inst.options(*join_loads)
-        logger.debug('Inst: %s', type(inst))
+        # logger.debug('Inst: %s', type(inst))
         self._after_read(inst)
         return self._serialize(inst, include_fields=include_fields,
                                exclude_fields=exclude_fields,
@@ -755,8 +754,8 @@ class ExpressController(RestController):
     @exception_wapper
     def _create(self, arguments):
         """_create: Create record(s)."""
-        logger.debug('%s:> _create', self.__class__.__name__)
-        logger.debug('arguments: %s', arguments)
+        # logger.debug('%s:> _create', self.__class__.__name__)
+        # logger.debug('arguments: %s', arguments)
         ext_flds = list()
 
         def _do_create_obj(data):
@@ -780,17 +779,17 @@ class ExpressController(RestController):
                 related_class = related_instrument.mapper.class_
                 related_class_pk_name = related_class.__table__.primary_key.columns.keys()[0]
                 exits_objs, new_objs, new_obj_datas = None, None, None
-                logger.debug('%s: %s', k, v)
+                # logger.debug('%s: %s', k, v)
                 if isinstance(v, (list, tuple)):
                     pks = map(lambda m: m[related_class_pk_name] if isinstance(m, dict) else m,
                               filter(lambda itm: True if (isinstance(itm, dict) and related_class_pk_name in itm)
                               or not isinstance(itm, dict) else False, v))
-                    logger.debug('pks = %s', pks)
+                    # logger.debug('pks = %s', pks)
                     new_obj_datas = filter(lambda m: isinstance(m, dict) and related_class_pk_name not in m, v)
                     if pks:
                         exits_objs = self._dbsession_.query(related_class). \
                             filter(getattr(related_class, related_class_pk_name).in_(pks)).all()
-                        logger.debug('exits_objs = %s', exits_objs)
+                        # logger.debug('exits_objs = %s', exits_objs)
                 elif isinstance(v, dict):
                     if related_class_pk_name in v:
                         exits_objs = self._dbsession_.query(related_class).get(v[related_class_pk_name])
@@ -813,7 +812,7 @@ class ExpressController(RestController):
                     related_objs = exits_objs
                 if new_objs:
                     related_objs = new_objs if not related_objs else related_objs + new_objs
-                logger.debug('[%s]related_objs: %s', k, related_objs)
+                # logger.debug('[%s]related_objs: %s', k, related_objs)
                 setattr(obj, k, related_objs)
             self._before_create(obj, **data)
             return obj
@@ -825,7 +824,7 @@ class ExpressController(RestController):
             objects = _do_create_obj(arguments)
             self._before_create(objects, **arguments)
             self._dbsession_.add(objects)
-        logger.debug('objects: %s', objects)
+        # logger.debug('objects: %s', objects)
         self._dbsession_.flush()
         self._after_create(objects)
         return objects, list(set(ext_flds))
@@ -833,10 +832,10 @@ class ExpressController(RestController):
     @exception_wapper
     def _update(self, arguments, pk=None, query=None):
         """_update: Update record(s) according to query."""
-        logger.debug('%s:> _update', self.__class__.__name__)
-        logger.debug('pk: %s', pk)
-        logger.debug('query: %s', query)
-        logger.debug('arguments: %s', arguments)
+        # logger.debug('%s:> _update', self.__class__.__name__)
+        # logger.debug('pk: %s', pk)
+        # logger.debug('query: %s', query)
+        # logger.debug('arguments: %s', arguments)
         ext_flds = list()
         if pk is not None:
             inst = self._dbsession_.query(self._model_).get(pk)
@@ -870,9 +869,9 @@ class ExpressController(RestController):
     @exception_wapper
     def _delete(self, pk=None, query=None):
         """_delete: Delete records from table according to query or pk."""
-        logger.debug('%s:> _delete', self.__class__.__name__)
-        logger.debug('pk: %s', pk)
-        logger.debug('query: %s', query)
+        # logger.debug('%s:> _delete', self.__class__.__name__)
+        # logger.debug('pk: %s', pk)
+        # logger.debug('query: %s', query)
         if pk is not None:
             inst = self._dbsession_.query(self._model_).get(pk)
             if not inst:
@@ -904,7 +903,6 @@ class ExpressController(RestController):
         get_one         | Display one record.                                          | GET /movies/1
         """
         if pk is None:
-            #abort(400, u"Invalid request!")
             raise BadRequest()
         try:
             controles, query = query_reparse(self._retrieve_http_query(request),
@@ -912,12 +910,10 @@ class ExpressController(RestController):
             self._check_permission('read')
             result = self._read(pk=pk, **controles)
         except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
-            #abort(ne._code_, u"%s" % ne)
+            logger.exception(u'Run read failed: %s', ne)
             raise ne
         except Exception, e:
-            logger.exception(u'>>> %s', e)
-            #abort(404, u"Object not found!", comment=u"%s" % e)
+            logger.exception(u'Run read failed: %s', e)
             raise FatalError(detail=str(e), title=u'Unknown error!')
         else:
             return result
@@ -933,60 +929,13 @@ class ExpressController(RestController):
             self._check_permission('read')
             result = self._read(query=query, **controles)
         except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
+            logger.exception(u'Run read failed: %s', ne)
             raise ne
         except Exception, e:
-            logger.exception(u'>>> %s', e)
+            logger.exception(u'Run read failed: %s', e)
             raise FatalError(detail=str(e))
         else:
             return result
-
-    # @expose('json')
-    # def get(self, *args, **kwargs):
-    #     """
-    #     get             | A combo of get_one and get_all.                              | GET /movies/  | GET /movies/1
-    #     """
-    #     debug_request(request)
-    #     return {'args': args, 'kwargs': kwargs}
-
-    # @expose('json')
-    # def new(self, **kwargs):
-    #     """
-    #     new             | Display a page to prompt the User for resource creation.     | GET /movies/new
-    #     """
-    #     #controles, query = query_reparse(self._scratch_http_query(request),
-    #                                          internal_filters=self._internal_filters_)
-    #     postdata = self._retrieve_http_post(request)
-    #     try:
-    #         self._check_permission('create')
-    #         result, ext_fields = self._create(postdata)
-    #     except ExpressError, ne:
-    #         logger.exception(u'>>> %s', ne)
-    #         raise ne
-    #     except Exception, e:
-    #         logger.exception(u'>>> %s', e)
-    #         raise ExpressError(detail=str(e))
-    #     return self._serialize(result, extend_fields=ext_fields)
-    #
-    # @expose('json')
-    # def edit(self, pk, **kwargs):
-    #     """
-    #     edit            | Display a page to prompt the User for resource modification. |  GET /movies/1/edit
-    #     """
-    #     #controles, query = query_reparse(self._scratch_http_query(request),
-    #                                          internal_filters=self._internal_filters_)
-    #     postdata = self._retrieve_http_post(request)
-    #     try:
-    #         self._check_permission('update')
-    #         result, ext_fields = self._update(postdata, pk=pk)
-    #     except ExpressError, ne:
-    #         logger.exception(u'>>> %s', ne)
-    #         raise ne
-    #     except Exception, e:
-    #         logger.exception(u'>>> %s', e)
-    #         raise ExpressError(detail=str(e))
-    #     else:
-    #         return self._serialize(result, extend_fields=ext_fields)
 
     @expose('json')
     def post(self, pk=None, **kwargs):
@@ -1003,20 +952,20 @@ class ExpressController(RestController):
                 self._check_permission('update')
                 result, ext_fields = self._update(postdata, pk=pk)
             except ExpressError, ne:
-                logger.exception(u'>>> %s', ne)
+                logger.exception(u'Run update failed: %s', ne)
                 raise ne
             except Exception, e:
-                logger.exception(u'>>> %s', e)
+                logger.exception(u'Run update failed: %s', e)
                 raise FatalError(detail=str(e))
         else:
             try:
                 self._check_permission('create')
                 result, ext_fields = self._create(postdata)
             except ExpressError, ne:
-                logger.exception(u'>>> %s', ne)
+                logger.exception(u'Run create failed: %s', ne)
                 raise ne
             except Exception, e:
-                logger.exception(u'>>> %s', e)
+                logger.exception(u'Run update failed: %s', e)
                 raise FatalError(detail=str(e))
         return self._serialize(result, extend_fields=ext_fields)
 
@@ -1035,30 +984,13 @@ class ExpressController(RestController):
             self._check_permission('update')
             result, ext_fields = self._update(postdata, pk=pk, query=query)
         except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
+            logger.exception(u'Run update failed: %s', ne)
             raise ne
         except Exception, e:
-            logger.exception(u'>>> %s', e)
+            logger.exception(u'run update failed: %s', e)
             raise FatalError(detail=str(e))
         else:
             return self._serialize(result, extend_fields=ext_fields)
-
-    # @expose('json')
-    # def post_delete(self, *args, **kwargs):
-    #     """
-    #     post_delete     | Delete an existing record.                                   | POST /movies/1?_method=DELETE
-    #                                                                                    | DELETE /movies/1
-    #     """
-    #     debug_request(request)
-    #     return {'args': args, 'kwargs': kwargs}
-    #
-    # @expose('json')
-    # def get_delete(self, *args, **kwargs):
-    #     """
-    #     get_delete      | Display a delete Confirmation page.                          | GET /movies/1/delete
-    #     """
-    #     debug_request(request)
-    #     return {'args': args, 'kwargs': kwargs}
 
     @expose('json')
     def delete(self, pk=None, **kwargs):
@@ -1080,32 +1012,31 @@ class ExpressController(RestController):
             else:
                 result = self._delete(query=query)
         except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
+            logger.exception(u'Run delete failed: %s', ne)
             raise ne
         except Exception, e:
-            logger.exception(u'>>> %s', e)
+            logger.exception(u'Run delete failed: %s', e)
             raise FatalError(detail=str(e))
         else:
             return result
 
     @expose('json')
-    def aggregate(self, **kwargs):
+    def _aggregate(self, **kwargs):
         controles, query = query_reparse(self._retrieve_http_query(request),
                                          internal_filters=self._internal_filters_)
         try:
             self._check_permission('read')
-            result = self._aggregate(query=query, **controles)
+            result = self.query_aggregate(query=query, **controles)
         except ExpressError, ne:
-            logger.exception(u'>>> %s', ne)
+            logger.exception(u'Query aggregation failed: %s', ne)
             raise ne
         except Exception, e:
-            logger.exception(u'>>> %s', e)
+            logger.exception(u'Query aggregation failed: %s', e)
             raise FatalError(detail=str(e))
         else:
             return result
 
-    #@expose('json')
-    def _aggregate(self, query=None, **controles):
+    def query_aggregate(self, query=None, **controles):
         """
         aggregate   /   A aggragation of data rows
                     | GET /movies/aggregate?__count=id&__sum=num,amount&__avg=price&__max=price&__min=price&__group_by=date&[filters]
@@ -1137,14 +1068,14 @@ class ExpressController(RestController):
         if group_bys:
             for c in group_bys:
                 group_by_columns.append(getattr(self._model_, c))
-        if group_by_columns:
-            queried_rows = self._query(*(group_by_columns+[x[1] for x in columns]), **query).group_by(*group_by_columns)
+        query_columns = group_by_columns+[x[1] for x in columns]
+        column_names = group_bys+[x[0] for x in columns] if group_bys else [x[0] for x in columns]
+        if query_columns:
+            queried_rows = self._query(*query_columns, **query).group_by(*group_by_columns)
             result = queried_rows.all()
-            result = map(lambda row: dict(map(None, group_bys+[x[0] for x in columns], row)), result)
+            result = map(lambda row: dict(map(None, column_names, row)), result) if result else []
         else:
-            queried_rows = self._query(*[x[1] for x in columns], **query)
-            result = queried_rows.all()
-            result = map(lambda row: dict(map(None, [x[0] for x in columns], row)), result)
+            result = []
         result = {
             '__type': 'Aggregation',
             '__ref': request.path,
@@ -1154,3 +1085,10 @@ class ExpressController(RestController):
             self._model_.__name__: result,
         }
         return result
+
+    @expose('json')
+    def _schema(self, **kwargs):
+        """
+        Return the table schema description in JSON.
+        """
+        return self.table_schema(**kwargs)

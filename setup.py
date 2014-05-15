@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from distutils.core import setup
-__version__ = '0.2.15'
+__version__ = '0.3.0'
 
 setup(name='tg2ext.express',
       version=__version__,
@@ -9,12 +9,10 @@ setup(name='tg2ext.express',
       author='Mingcai SHEN',
       author_email='archsh@gmail.com',
       packages=['tg2ext', 'tg2ext.express'],
-      #package_dir={'tg2ext': 'tg2ext'},
-      #package_data={'tg2ext': ['controller', 'exceptions']},
       license="The MIT License (MIT)",
       platforms=["any"],
       install_requires=[
           'TurboGears2>=2.3.1',
-          'SQLAlchemy>=0.8.2',
+          'SQLAlchemy>=0.9.0',
       ],
       url='https://github.com/archsh/tg2ext.express')
