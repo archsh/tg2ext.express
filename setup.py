@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from distutils.core import setup
-__version__ = '0.3.0'
+__version__ = '0.3.1-dev'
 
 setup(name='tg2ext.express',
       version=__version__,

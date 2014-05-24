@@ -751,6 +751,47 @@ class ExpressController(RestController):
                                begin=begin,
                                limit=limit)
 
+    def _create_or_update_object(self, mdl, arguments, extend_fields=None):
+        #logger.debug('_create_or_update_object[%s]: > %s', mdl.__name__, arguments)
+        ext_flds = [] if extend_fields is None else [extend_fields] \
+            if isinstance(extend_fields, (str, unicode)) else extend_fields
+        if arguments is None:
+            return None, ext_flds
+        if isinstance(arguments, (list, tuple)):
+            inst, exts = zip(*map(lambda x: list(self._create_or_update_object(mdl, x)), arguments))
+            for ex in exts:
+                ext_flds.extend(ex)
+            #logger.debug('>>>>>>>>>>> inst=%s, exts=%s', inst, exts)
+            return list(inst), ext_flds
+        if not isinstance(arguments, dict):
+            #logger.debug('>>>>>>>>>>> only get object: %s', arguments)
+            return self._dbsession_.query(mdl).get(arguments), ext_flds
+        else:
+            #logger.debug('>>>>>>>>>>> create or update ???')
+            self._before_create(None, **arguments)
+            pk_name = mdl.__table__.primary_key.columns.keys()[0]
+            pk_val = arguments.pop(pk_name, None)
+            objdata = dict()
+            for k in mdl.__table__.c.keys():
+                if k in arguments:
+                    objdata[k] = arguments.get(k)
+            if pk_val is None:
+                inst = mdl(**objdata)
+            else:
+                inst = self._dbsession_.query(mdl).filter(getattr(mdl, pk_name) == pk_val).one()
+            for k, v in arguments.items():
+                if k in mdl.__mapper__.relationships.keys():
+                    related_instrument = mdl.__mapper__.relationships[k]
+                    related_class = related_instrument.mapper.class_
+                    related_objs, exts = self._create_or_update_object(related_class, v)
+                    ext_flds.append(k)
+                    exts = map(lambda x: '.'.join([k, x]), exts)
+                    ext_flds.extend(exts)
+                    setattr(inst, k, related_objs)
+                else:
+                    setattr(inst, k, v)
+            return inst, ext_flds
+
     @exception_wapper
     def _create(self, arguments):
         """_create: Create record(s)."""
@@ -816,13 +857,13 @@ class ExpressController(RestController):
                 setattr(obj, k, related_objs)
             self._before_create(obj, **data)
             return obj
-
-        if isinstance(arguments, (list, tuple)):
-            objects = map(_do_create_obj, arguments)
+        objects = self._create_or_update_object(self._model_, arguments)
+        if isinstance(objects, (list, tuple)):
+            #objects = map(_do_create_obj, arguments)
             self._dbsession_.add_all(objects)
         else:
-            objects = _do_create_obj(arguments)
-            self._before_create(objects, **arguments)
+            #objects = _do_create_obj(arguments)
+            #self._before_create(objects, **arguments)
             self._dbsession_.add(objects)
         # logger.debug('objects: %s', objects)
         self._dbsession_.flush()
@@ -848,20 +889,34 @@ class ExpressController(RestController):
             for k, v in arguments.items():
                 if self._readonly_fields_ and k in self._readonly_fields_:
                     raise InvalidData(detail='Column(%s) is read-only!' % k)
+                if k in self._model_.__mapper__.relationships.keys():
+                    related_instrument = self._model_.__mapper__.relationships[k]
+                    related_class = related_instrument.mapper.class_
+                    v, exts = self._create_or_update_object(related_class, v)
+                    ext_flds.append(k)
+                    for ex in exts:
+                        ext_flds.extend(ex)
+                #logger.debug('_update>>> %s: %s', k, v)
                 setattr(inst, k, v)
             self._dbsession_.add(inst)
             result = inst
         else:
-            inst = self._query(**query) if query else self._query()
-            if not isinstance(arguments, dict) or not arguments:
-                raise InvalidData()
-            arguments = self._validate_object_data(self._encode_object_data(arguments))
-            self._before_update(inst, arguments)
-            for k, v in arguments.items():
-                if self._readonly_fields_ and k in self._readonly_fields_:
-                    raise InvalidData(detail='Column(%s) is read-only!' % k)
-            inst.update(arguments)
-            result = inst
+            if isinstance(arguments, (tuple, list)):
+                result, exts = self._create_or_update_object(self._model_, arguments)
+                for ex in exts:
+                    ext_flds.extend(ex)
+            elif isinstance(arguments, dict):
+                inst = self._query(**query) if query else self._query()
+                arguments = self._validate_object_data(self._encode_object_data(arguments))
+                self._before_update(inst, arguments)
+                for k, v in arguments.items():
+                    if self._readonly_fields_ and k in self._readonly_fields_:
+                        raise InvalidData(detail='Column(%s) is read-only!' % k)
+                inst.update(arguments)
+                result = inst
+            else:
+                raise InvalidData(detail='arguments must be dict or list!')
+
         self._dbsession_.flush()
         self._after_update(inst)
         return result, ext_flds
