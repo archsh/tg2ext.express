@@ -886,7 +886,14 @@ class ExpressController(RestController):
         # logger.debug('arguments: %s', arguments)
         ext_flds = list()
         if pk is not None:
-            inst = self._dbsession_.query(self._model_).get(pk)
+            if query:
+                if '__default' in query and query['__default']:
+                    query['__default'].update({self._model_.__table__.primary_key.columns.keys()[0]: pk})
+                else:
+                    query['__default'] = {self._model_.__table__.primary_key.columns.keys()[0]: pk}
+            else:
+                query = {'__default': {self._model_.__table__.primary_key.columns.keys()[0]: pk}}
+            inst = self._query(**query).one()  # self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
             if not isinstance(arguments, dict) or not arguments:
