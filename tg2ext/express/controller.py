@@ -752,13 +752,17 @@ class ExpressController(RestController):
                                limit=limit)
 
     def _create_or_update_object(self, mdl, arguments, extend_fields=None):
+        """
+        Create or update objects according to giving arguments,
+        Retuens affect objects and extend_fields.
+        """
         #logger.debug('_create_or_update_object[%s]: > %s', mdl.__name__, arguments)
-        ext_flds = [] if extend_fields is None else [extend_fields] \
-            if isinstance(extend_fields, (str, unicode)) else extend_fields
+        ext_flds = list()
         if arguments is None:
             return None, ext_flds
         if isinstance(arguments, (list, tuple)):
-            inst, exts = zip(*map(lambda x: list(self._create_or_update_object(mdl, x)), arguments))
+            inst, exts = zip(*map(lambda x: list(self._create_or_update_object(mdl, x, extend_fields=extend_fields)),
+                                  arguments))
             for ex in exts:
                 ext_flds.extend(ex)
             #logger.debug('>>>>>>>>>>> inst=%s, exts=%s', inst, exts)
@@ -783,9 +787,12 @@ class ExpressController(RestController):
                 if k in mdl.__mapper__.relationships.keys():
                     related_instrument = mdl.__mapper__.relationships[k]
                     related_class = related_instrument.mapper.class_
-                    related_objs, exts = self._create_or_update_object(related_class, v)
-                    ext_flds.append(k)
-                    exts = map(lambda x: '.'.join([k, x]), exts)
+                    related_objs, exts = self._create_or_update_object(related_class, v, k)
+                    if extend_fields:
+                        ext_flds.append('.'.join([extend_fields, k]))
+                        exts = map(lambda x: '.'.join([extend_fields, x]), exts)
+                    else:
+                        ext_flds.append(k)
                     ext_flds.extend(exts)
                     setattr(inst, k, related_objs)
                 else:
@@ -892,7 +899,7 @@ class ExpressController(RestController):
                 if k in self._model_.__mapper__.relationships.keys():
                     related_instrument = self._model_.__mapper__.relationships[k]
                     related_class = related_instrument.mapper.class_
-                    v, exts = self._create_or_update_object(related_class, v)
+                    v, exts = self._create_or_update_object(related_class, v, extend_fields=k)
                     ext_flds.append(k)
                     for ex in exts:
                         ext_flds.extend(ex)
