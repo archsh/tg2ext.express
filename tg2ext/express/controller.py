@@ -864,7 +864,7 @@ class ExpressController(RestController):
                 setattr(obj, k, related_objs)
             self._before_create(obj, **data)
             return obj
-        objects = self._create_or_update_object(self._model_, arguments)
+        objects, ext_flds = self._create_or_update_object(self._model_, arguments)
         if isinstance(objects, (list, tuple)):
             #objects = map(_do_create_obj, arguments)
             self._dbsession_.add_all(objects)
