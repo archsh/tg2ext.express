@@ -749,7 +749,7 @@ class ExpressController(RestController):
         else:
             inst, count = self._query(**query) if query else self._query()
             if join_loads:
-                inst, count = inst.options(*join_loads)
+                inst = inst.options(*join_loads)
         # logger.debug('Inst: %s', type(inst))
         self._after_read(inst)
         return self._serialize(inst, include_fields=include_fields,
