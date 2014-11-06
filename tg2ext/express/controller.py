@@ -525,7 +525,8 @@ class ExpressController(RestController):
                    extend_fields=None,
                    order_by=None,
                    begin=None,
-                   limit=None):
+                   limit=None,
+                   count=None):
         """_serialize generate a dictionary from a queryset instance `inst` according to the meta controled by handler
         and the following arguments:
         `include_fields`: a list of field names want to included in output;
@@ -561,7 +562,8 @@ class ExpressController(RestController):
         if isinstance(inst, Query):
             begin = begin or 0
             limit = 50 if limit is None else limit
-            count = inst.count()
+            if count is None:
+                count = inst.count()
             result.update({
                 '__total': count,
                 '__count': count,
@@ -628,8 +630,9 @@ class ExpressController(RestController):
         """_query: return a Query instance according to the giving query data.
         """
         inst = self._dbsession_.query(self._model_) if not columns else self._dbsession_.query(*columns)
+        count_inst = self._dbsession_.query(func.COUNT(getattr(self._model_, self._model_.__table__.primary_key.columns.keys()[0])))
         if not query:
-            return inst
+            return inst, count_inst.scalar()
         default_query = query.pop('__default', None)
         if default_query:
             filters = list()
@@ -644,8 +647,10 @@ class ExpressController(RestController):
             #logger.debug('[default] joins: %s', joins)
             for j in joins:
                 inst = inst.join(j)
+                count_inst = count_inst.join(j)
             if filters:
                 inst = inst.filter(and_(*filters))
+                count_inst = count_inst.filter(and_(*filters))
         for pair, conditions in query.items():
             filters, joins = list(), list()
             for k, v in conditions.items():
@@ -658,9 +663,11 @@ class ExpressController(RestController):
             #logger.debug('[%s] joins: %s', pair, joins)
             for j in joins:
                 inst = inst.join(j)
+                count_inst = count_inst.join(j)
             if filters:
                 inst = inst.filter(or_(*filters))
-        return inst
+                count_inst = count_inst.filter(or_(*filters))
+        return inst, count_inst.scalar()
 
     @staticmethod
     def _retrieve_http_query(http_request):
@@ -738,10 +745,11 @@ class ExpressController(RestController):
                 else self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
+            count = 1
         else:
-            inst = self._query(**query) if query else self._query()
+            inst, count = self._query(**query) if query else self._query()
             if join_loads:
-                inst = inst.options(*join_loads)
+                inst, count = inst.options(*join_loads)
         # logger.debug('Inst: %s', type(inst))
         self._after_read(inst)
         return self._serialize(inst, include_fields=include_fields,
@@ -749,7 +757,8 @@ class ExpressController(RestController):
                                extend_fields=extend_fields,
                                order_by=order_by,
                                begin=begin,
-                               limit=limit)
+                               limit=limit,
+                               count=count)
 
     def _create_or_update_object(self, mdl, arguments, extend_fields=None):
         """
@@ -893,9 +902,10 @@ class ExpressController(RestController):
                     query['__default'] = {self._model_.__table__.primary_key.columns.keys()[0]: pk}
             else:
                 query = {'__default': {self._model_.__table__.primary_key.columns.keys()[0]: pk}}
-            inst = self._query(**query).one()  # self._dbsession_.query(self._model_).get(pk)
+            inst, count = self._query(**query)  # self._dbsession_.query(self._model_).get(pk)
             if not inst:
                 raise NotFound()
+            inst = inst.one()
             if not isinstance(arguments, dict) or not arguments:
                 raise InvalidData()
             arguments = self._validate_object_data(self._encode_object_data(arguments))
@@ -920,7 +930,7 @@ class ExpressController(RestController):
                 for ex in exts:
                     ext_flds.extend(ex)
             elif isinstance(arguments, dict):
-                inst = self._query(**query) if query else self._query()
+                inst, count = self._query(**query) if query else self._query()
                 arguments = self._validate_object_data(self._encode_object_data(arguments))
                 self._before_update(inst, arguments)
                 for k, v in arguments.items():
@@ -951,7 +961,7 @@ class ExpressController(RestController):
                       '__model': self._model_.__name__}
             self._dbsession_.delete(inst)
         else:
-            inst = self._query(**query) if query else self._query()
+            inst, count = self._query(**query) if query else self._query()
             self._before_delete(inst)
             result = map(lambda x: x._asdict(), inst.values(*self._model_.__table__.primary_key.columns.values()))
             #map(lambda x: {self._model_.__table__.primary_key.columns.keys()[0]: x},
@@ -1140,7 +1150,8 @@ class ExpressController(RestController):
         query_columns = group_by_columns+[x[1] for x in columns]
         column_names = group_bys+[x[0] for x in columns] if group_bys else [x[0] for x in columns]
         if query_columns:
-            queried_rows = self._query(*query_columns, **query).group_by(*group_by_columns)
+            queried_rows, count = self._query(*query_columns, **query)
+            queried_rows = queried_rows.group_by(*group_by_columns)
             result = queried_rows.all()
             result = map(lambda row: dict(map(None, column_names, row)), result) if result else []
         else:

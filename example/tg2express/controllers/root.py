@@ -18,6 +18,14 @@ logger = logging.getLogger('tg2express')
 __all__ = ['RootController']
 
 
+class ArticleController(BaseController):
+
+    @expose()
+    def _lookup(self, *reminders):
+        from tg2express.model.articles import Article
+        return ExpressController(model=Article, dbsession=DBSession)
+
+
 class RootController(BaseController):
     """
     The root controller for the tg2express application.
