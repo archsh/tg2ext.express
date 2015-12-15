@@ -88,7 +88,7 @@ def build_filter(model, key, value, joins=None):
     k1 = key.pop(0)  # Get the first part of key
     kk = k1.split('__')
     kk1 = kk.pop(0)
-    if kk1 in model.__table__.c.keys():  # Check if this is a field
+    if kk1 in map(lambda x: x.key, model.__mapper__._prop_set):  # Check if this is a field
         field = getattr(model, kk1)
         if not kk:
             return field == _encode_(kk1, value), joins
@@ -174,7 +174,7 @@ def build_order_by(cls, order_by):
         if by and by.startswith('-'):
             by = by[1:]
             is_desc = True
-        if by and by in c.__table__.c.keys():
+        if by and by in map(lambda x: x.key, c.__mapper__._prop_set):
             return None, desc(getattr(c, by)) if is_desc else asc(getattr(c, by))
         else:
             return None, None
@@ -281,8 +281,8 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
     if not isinstance(inst, cls):
         return inst
     #logger.debug('serialize_object> extend_fields: %s', extend_fields)
-    include_fields = include_fields or cls.__table__.c.keys() ## TODO: Change to use map(lambda x: x.key, cls.__mapper__._prop_set)
-    include_fields = list(set(include_fields) | set(cls.__table__.primary_key.columns.keys()))
+    include_fields = include_fields or map(lambda x: x.key, cls.__mapper__._prop_set) ## TODO: Change to use map(lambda x: x.key, cls.__mapper__._prop_set)
+    include_fields = list(set(include_fields) | set(map(lambda x: x.key, cls.__mapper__._prop_set)))
     #if not set(include_fields) <= set(cls.__mapper__.c.keys()):
     #    raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
     #        set(include_fields) - set(cls.__mapper__.c.keys())
@@ -374,7 +374,7 @@ class ExpressController(RestController):
         self._dbsession_ = dbsession
         if self._model_ is None:
             raise Exception('"_model_" can not be None, must be a valid model class of sqlalchemy!')
-        self._columns_ = self._model_.__table__.c.keys()
+        self._columns_ = map(lambda x: x.key, self._model_.__mapper__._prop_set)
         if extra_attrs is not None:
             extra_attrs = extra_attrs if isinstance(extra_attrs, (list, tuple)) else extra_attrs.split(',')
             self._columns_.extend(extra_attrs)
@@ -496,7 +496,7 @@ class ExpressController(RestController):
         if isinstance(obj, (list, tuple)):
             return map(lambda x: self._dump_object_(x, **kwargs), obj)
         elif isinstance(obj, self._model_):
-            return dict([(k, getattr(obj, k)) for k in self._model_.__table__.c.keys()])
+            return dict([(k, getattr(obj, k)) for k in map(lambda x: x.key, self._model_.__mapper__._prop_set)])
         else:
             raise FatalError("Invalid object to dump.")
 
@@ -785,7 +785,7 @@ class ExpressController(RestController):
             pk_name = mdl.__table__.primary_key.columns.keys()[0]
             pk_val = arguments.pop(pk_name, None)
             objdata = dict()
-            for k in mdl.__table__.c.keys():
+            for k in map(lambda x: x.key, mdl.__mapper__._prop_set):
                 if k in arguments:
                     objdata[k] = arguments.get(k)
             if pk_val is None:
@@ -821,7 +821,7 @@ class ExpressController(RestController):
             objdata = {}
 
             for k, v in data.items():
-                if k in self._model_.__table__.c.keys():
+                if k in map(lambda x: x.key, self._model_.__mapper__._prop_set):
                     objdata[k] = v
                 elif k in self._model_.__mapper__.relationships.keys():
                     relatedobjs[k] = v
