@@ -281,7 +281,7 @@ def serialize_object(cls, inst, include_fields=None, extend_fields=None):
     if not isinstance(inst, cls):
         return inst
     #logger.debug('serialize_object> extend_fields: %s', extend_fields)
-    include_fields = include_fields or cls.__table__.c.keys()
+    include_fields = include_fields or cls.__table__.c.keys() ## TODO: Change to use map(lambda x: x.key, cls.__mapper__._prop_set)
     include_fields = list(set(include_fields) | set(cls.__table__.primary_key.columns.keys()))
     #if not set(include_fields) <= set(cls.__mapper__.c.keys()):
     #    raise BadRequest(message='Column(s) "%s" does not exists!' % ','.join(list(
